@@ -63,5 +63,69 @@ INFO  : No new timers need to be added
 15 0-23/2 * * * cd $HOME/tvinfomerk2vdr-ng-master/ && $HOME/tvinfomerk2vdr-ng-master/tvinfomerk2vdr-ng-wrapper.sh 2>&1
 
     => output is usually sent via e-mail, so it is recommended that
-     a) change cron output to log file
+     a) change cron output to syslog (-L) - don't forget to watch the logs...
      b) enable sending of e-mail by configuration of local mailserver and related forward entries
+
+
+#### See also online help of wrapper and the perl program, example:
+
+$ ./tvinfomerk2vdr-ng-wrapper.sh -h
+Usage:
+	(Normal operations need no option)
+		read config: /etc/opt/tvinfomerk2vdr-ng/users.conf
+		call script: ./tvinfomerk2vdr-ng.pl
+
+Debug options:
+	-t	use test script /home/peter/tvinfomerk2vdr/tvinfomerk2vdr-ng-test.pl
+	-p	file prefix for data files (-R/-W)
+	-u USER	select user from config list
+	-l	list configured users
+
+Debug options for called script:
+	-R	read XML data from file
+	-W	write XML data to file
+	-N	do not execute any changes on VDR timers
+	-D	enable debugging
+	-T	enable tracing
+
+Functional options for called script:
+	-C ARGS	(see online help)
+	-c 	(see online help)
+	-L 	(see online help)
+	-S 	(see online help)
+	-X 	(see online help)
+
+	online help: ./tvinfomerk2vdr-ng.pl -h
+
+Example for contents of /etc/opt/tvinfomerk2vdr-ng/users.conf:
+
+# Configuration files for shell script wrapper
+# #TVinfo-User:TVinfo-Pass:Folder:Email
+# Account1:Password1:Folder1:test1@example.com
+# Account2:Password2:Folder2:test2@example.com
+
+
+$ ./tvinfomerk2vdr-ng.pl -h
+
+Usage: ./tvinfomerk2vdr-ng.pl [options]
+
+Options: -d <hostname>             VDR hostname (default: localhost)
+         -p <port>                 SVDRP port number (default: 2001)
+         -U <username>             TVinfo username (default: <TODO> [config-ng.pl])
+         -P <password>             TVinfo password (default: <TODO> [config-ng.pl])
+         -F <folder>               folder for VDR records (default: none)
+         -c                        show Channel Map results (and stop)
+         -L                        use syslog instead of stderr
+         -S                        show summary to stdout in case of any changes or log messages > notice
+         -h	                   Show this help text
+
+Debug options:
+         -v                        Show verbose messages
+         -s	                   Simulation Mode (no SVDRP communication)
+         -D	                   Debug Mode
+         -T	                   Trace Mode
+         -C class[,...]            Debug Classes: VDR MATCH AlleSender VDR-CH CORR MeineSender XML Channelmap
+         -X	                   XML Debug Mode
+         -N	                   No SVDRP change action (do not delete/add timers)
+         -W <prefix>               Write XML raw responses to   files (suffices will be added automatically)
+         -R <prefix>               Read  XML raw responses from files (suffices will be added automatically)
