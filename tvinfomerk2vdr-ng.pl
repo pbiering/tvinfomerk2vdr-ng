@@ -28,7 +28,7 @@
 # 20130825/pb: add support for CA whitelist and fix broken CA channel config switch
 # 20140102/pb: replace invalid loglevel FATAL with ALERT
 # 20140115/pb: fix changed login URI on www.tvinfo.de
-# 20140709/pb: fix broken handling in case of multible users select same timer in folder mode
+# 20140709/pb: fix broken handling in case of multiple users select same timer in folder mode
 # 20140802/pb: use new Station XML URL instead of HTML "Meine Sender"
 
 use strict; 

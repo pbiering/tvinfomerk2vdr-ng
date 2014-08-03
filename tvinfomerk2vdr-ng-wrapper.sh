@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Wrapper script for tvinfomerk2vdr-ng.pl to handle multible TVinfo user accounts
+# Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
 # (P) & (C) 2013-2014 by Peter Bieringer <pb@bieringer.de>
 #
