@@ -1,0 +1,67 @@
+Installation:
+
+## Local
+- become non-root user (strongly recommended), here as example: vdr
+
+- download & extract package into a directory
+    # su - vdr
+    $ wget https://github.com/pbiering/tvinfomerk2vdr-ng/archive/master.zip
+    $ unzip master.zip
+    $ cd tvinfomerk2vdr-ng-master
+
+- create as root the folder /etc/opt/tvinfomerk2vdr-ng and change permission
+    # mkdir -p /etc/opt/tvinfomerk2vdr-ng
+    # chown vdr /etc/opt/tvinfomerk2vdr-ng
+
+- copy & adjust config file: /etc/opt/tvinfomerk2vdr-ng/users.conf
+    $ cp etc-opt-tvinfomerk2vdr-ng-users.conf.example /etc/opt/tvinfomerk2vdr-ng/users.conf
+    don't forget to set at least user/pass/folder
+
+- list confgured users:
+    $ ./tvinfomerk2vdr-ng-wrapper.sh -l
+INFO  : list users
+INFO  : List entry: USER:PASS
+
+
+## TVinfo
+- create TVinfo account (if not already existing)
+   in case of empty 'Sender' (stations) or 'Merkzettel' (schedules) below contact TVinfo support to trigger enabling in their backend
+
+- check that your TVinfo 'Merkzettel' at least contains one entry
+
+
+## TVinfo+Local
+- check channel mapping (TVinfo->VDR)
+    $ ./tvinfomerk2vdr-ng-wrapper.sh -c -N -u USER
+    => adjust 'Meine Sender' for proper matching (goal is delta=0)
+
+
+## Local
+- check download of 'Merkzettel' in dry-run mode (-N)
+    $ ./tvinfomerk2vdr-ng-wrapper.sh -N -u USER
+    => if script reports that at least one timer must be added to VDR, everything is looking well
+
+- run script without dry-run
+    $ ./tvinfomerk2vdr-ng-wrapper.sh -u USER
+    => timers should be created
+
+- re-run script without dry-run should result in following output:
+    $ ./tvinfomerk2vdr-ng-wrapper.sh -u USER
+INFO  : selected user: USER
+INFO  : run tvinfomerk2vdr-ng with username: USER (folder:FOLDER)
+INFO  : Fetch 'Sender' via XML interface
+INFO  : XML 'Sender' has entries: 181
+INFO  : MeineSender amount (summary): 64
+INFO  : AlleSender amount (cross-check summary): 64 (delta=0 [should be 0] nomatch=117 [station not existing in VDR])
+INFO  : Fetch 'Merkzettel' via XML interface
+INFO  : XML 'Merkliste' has entries: 24
+INFO  : No existing timers need to be removed
+INFO  : No new timers need to be added
+
+- finally create a cron job (crontab -e) with following contents
+@reboot cd $HOME/tvinfomerk2vdr-ng-master/ && $HOME/tvinfomerk2vdr-ng-master/tvinfomerk2vdr-ng-wrapper.sh 2>&1
+15 0-23/2 * * * cd $HOME/tvinfomerk2vdr-ng-master/ && $HOME/tvinfomerk2vdr-ng-master/tvinfomerk2vdr-ng-wrapper.sh 2>&1
+
+    => output is usually sent via e-mail, so it is recommended that
+     a) change cron output to log file
+     b) enable sending of e-mail by configuration of local mailserver and related forward entries
