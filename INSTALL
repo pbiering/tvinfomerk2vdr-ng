@@ -35,6 +35,10 @@ INFO  : List entry: USER:PASS
     $ ./tvinfomerk2vdr-ng-wrapper.sh -c -N -u USER
     => adjust 'Meine Sender' for proper matching (goal is delta=0)
 
+    NOTE: if the Perl program claims about major issues regarding missing modules, install these modules and re-run
+      already known:
+        Ubuntu: libxml-simple-perl libdate-calc-perl
+	Fedora: perl-XML-Simple
 
 ## Local
 - check download of 'Merkzettel' in dry-run mode (-N)
