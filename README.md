@@ -8,4 +8,4 @@ This sophisticated Perl program pulls stations ('Meine Sender') and schedules ('
 
 It also supports multiple TVinfo user accounts (by a shell wrapper):
  - create VDR timers with configurable folder per user
- - detects duplicate entries on Merkzettel and change folder to special one
+ - detects duplicate entries on 'Merkzettel' and change folder to special one
