@@ -42,7 +42,7 @@ INFO  : List entry: USER:PASS
     NOTE: if the Perl program claims about major issues regarding missing modules, install these modules and re-run
       already known:
         Ubuntu: libxml-simple-perl libdate-calc-perl
-	Fedora: perl-XML-Simple
+	Fedora: perl-XML-Simple perl-Date-Calc perl-Sys-Syslog
 
 ## Local
 - check download of 'Merkzettel' in dry-run mode (-N)

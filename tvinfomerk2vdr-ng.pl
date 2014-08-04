@@ -43,7 +43,7 @@ my $progversion = "0.1.0";
 
 ## Requirements:
 # Ubuntu: libxml-simple-perl libdate-calc-perl
-# Fedora: perl-XML-Simple
+# Fedora: perl-XML-Simple perl-Date-Calc perl-Sys-Syslog
 
 ## Extensions (in difference to original version):
 # - Multi-tvinfo account capable
