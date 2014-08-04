@@ -424,6 +424,7 @@ if (defined $WriteFileBase) {
 };
 
 if (defined $ReadFileBase) {
+	logging("DEBUG", "ReadFileBase=" . $ReadFileBase);
 	$ReadScheduleXML          = $ReadFileBase  . "-schedule.xml";
 	$ReadStationsXML          = $ReadFileBase  . "-stations.xml";
 	$ReadChannelsSvdrp        = $ReadFileBase  . "-channels.svdrp";
@@ -437,12 +438,23 @@ my $xml;
 
 ### read margins from VDR setup.conf
 ## Missing VDR feature: read such values via SVDRP
+
+my @setup_conf_lines;
+
+if (defined $ReadSetupConf) {
+	$setupfile = $ReadSetupConf;
+};
+
 logging("DEBUG", "Try to read margins from VDR setup.conf file: " . $setupfile);
+
 if(open(FILE, "<$setupfile")) {
-	my @lines;
 	while(<FILE>) {
-		push @lines, $_;
+		push @setup_conf_lines, $_;
+
 		chomp $_;
+
+		logging("TRACE", "VDR setup.conf line: " . $_);
+
 		next if ($_ !~ /^Margin(Start|Stop)\s*=\s*([0-9]+)$/o);
 		if ($1 eq "Start") {
 			$MarginStart = $2 * 60;
@@ -457,10 +469,13 @@ if(open(FILE, "<$setupfile")) {
 	if (defined $WriteSetupConf) {
 		logging("NOTICE", "write setup.conf contents to file: " . $WriteSetupConf);
 		open(FILE, ">$WriteSetupConf") || die;
-		print FILE @lines;
+		print FILE @setup_conf_lines;
 		close(FILE);
 		logging("NOTICE", "setup.conf contents to file written: " . $WriteSetupConf);
 	};
+} else {
+	logging("ERROR", "Can't read VDR setup.conf file: " . $setupfile);
+	exit 1;
 };
 
 if (! defined $MarginStart) {
