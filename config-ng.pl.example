@@ -19,9 +19,6 @@ our $lifetime = "99";
 our $http_proxy = "";                   # example: http://172.16.1.1:3128/
 our $networktimeout = 30;		# networktimeout in seconds.
 
-## TVinfo related
-our $http_base = "http://www.tvinfo.de/"; # Not recommended to change
-
 ## TVinfo credentials (see also tvinfomerk2vdr-ng-wrapper.sh)
 our $username = "<TODO>"; # can be also provided via option (-u ...)
 our $password = "<TODO>"; # can be also provided via option (-p ...)

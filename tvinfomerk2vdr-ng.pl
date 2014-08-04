@@ -9,7 +9,7 @@
 # License: GPLv2
 #
 # Authors:
-#  Peter Bieringer (bie)
+#  Peter Bieringer (pb)
 #  <macfly> / Friedhelm Büscher
 #
 # Changelog:
@@ -30,6 +30,7 @@
 # 20140115/pb: fix changed login URI on www.tvinfo.de
 # 20140709/pb: fix broken handling in case of multiple users select same timer in folder mode
 # 20140802/pb: use new Station XML URL instead of HTML "Meine Sender"
+# 20140804/pb: add support for MD5 hashed password
 
 use strict; 
 use warnings; 
@@ -309,6 +310,30 @@ sub createfoldername(@) {
 	return ($result);
 };
 
+## replace tokens in request
+sub request_replace_tokens($) {
+	my $request = shift || return 1;
+
+	logging("DEBUG", "request  original: " . $request);
+	logging("DEBUG", "username         : " . $username);
+	logging("DEBUG", "password         : " . $password);
+
+	# replace username token
+	my $passwordhash;
+	if ($password =~ /^{MD5}(.*)/) {
+		$passwordhash = $1;
+	} else {
+		$passwordhash = md5_hex($password);
+	};
+
+	$request =~ s/<USERNAME>/$username/;
+	$request =~ s/<PASSWORDHASH>/$passwordhash/;
+
+	logging("DEBUG", "request result   : " . $request);
+	return($request)
+};
+
+
 ###############################################################################
 #
 # Main
@@ -365,9 +390,14 @@ if (! defined $username || $username eq "<TODO>") {
 	logging("ERROR", "TVinfo username not defined (use -U or specify in " . $file_config . ")");
 	exit 1;
 };
+
 if (! defined $password || $password eq "<TODO>") {
 	logging("ERROR", "TVinfo password not defined (use -P or specify in " . $file_config . ")");
 	exit 1;
+};
+
+if ($password !~ /^{MD5}/) {
+	logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
 };
 
 
@@ -484,16 +514,9 @@ if (defined $ReadStationsXML) {
 	# Fetch 'Sender' via XML interface
 	logging ("INFO", "Fetch 'Sender' via XML interface");
 
-	logging("DEBUG", "username: " . $username);
-	logging("DEBUG", "password: " . $password);
-	my $request = $http_base . "external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>";
+	my $request = request_replace_tokens("http://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
-	# replace username token
-	my $passwordhash = md5_hex($password);
-	$request =~ s/<USERNAME>/$username/;
-	$request =~ s/<PASSWORDHASH>/$passwordhash/;
-
-	logging("DEBUG", "request: " . $request);
+	logging("DEBUG", "start request: " . $request);
 
 	my $response = $useragent->request(GET "$request");
 	if (! $response->is_success) {
@@ -737,16 +760,9 @@ if (defined $ReadScheduleXML) {
 	# Fetch 'Merkliste' via XML interface
 	logging ("INFO", "Fetch 'Merkzettel' via XML interface");
 
-	logging("DEBUG", "username: " . $username);
-	logging("DEBUG", "password: " . $password);
-	my $request = $http_base . "share/openepg/schedule.php?username=<USERNAME>&password=<PASSWORDHASH>";
+	my $request = request_replace_tokens("http://www.tvinfo.de/share/openepg/schedule.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
-	# replace username token
-	my $passwordhash = md5_hex($password);
-	$request =~ s/<USERNAME>/$username/;
-	$request =~ s/<PASSWORDHASH>/$passwordhash/;
-
-	logging("DEBUG", "request: " . $request);
+	logging("DEBUG", "start request: " . $request);
 
 	my $response = $useragent->request(GET "$request");
 	if (! $response->is_success) {
@@ -864,6 +880,12 @@ foreach my $xml_entry_p (@xml_list) {
 	logging("TRACE", "XML: start=$xml_starttime (day=$xml_starttime_day month=$xml_starttime_month hourmin=$xml_starttime_hourmin) end=$xml_endtime (hourmin=$xml_endtime_hourmin) channel=$xml_channel title='$xml_title'");
 
 	$xml_valid_map{$xml_entry} = 1;
+};
+
+
+if (defined $opt_W) {
+	logging("NOTICE", "Stop here because option used: -W");
+	exit 0;
 };
 
 

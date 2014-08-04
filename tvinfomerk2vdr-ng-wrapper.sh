@@ -6,12 +6,22 @@
 #
 # License: GPLv2
 #
+# Authors:
+#  Peter Bieringer (pb)
+#
 # 20130116/pb: initial release
 # 20130128/pb: add -c/-C option passthrough
 # 20130203/pb: add -L/-S option passthrough, use -L/-S by default if called by cron
 # 20130228/pb: add -X option passthrough
 # 20130509/pb: improve online help
 # 20140704/pb: extend debug output
+# 20140804/pb: add protection to avoid running this script as root
+# 20140804/pb: add support for -P (password hash)
+
+if [ $UID -eq 0 ]; then
+	echo "ERROR : this script is not allowed to run as root"
+	exit 1
+fi
 
 config="/etc/opt/tvinfomerk2vdr-ng/users.conf"
 
@@ -54,11 +64,13 @@ Usage:
 		read config: $config
 		call script: $script
 
+	-u USER	select user from config list
+	-l	list configured users
+	-P	generate password hash
+
 Debug options:
 	-t	use test script $script_test
 	-p	file prefix for data files (-R/-W)
-	-u USER	select user from config list
-	-l	list configured users
 
 Debug options for called script:
 	-R	read XML data from file
@@ -87,8 +99,11 @@ END
 }
 
 # option handling
-while getopts "p:u:lXcRTDWNthSLC:?" opt; do
+while getopts "p:u:lXcRPTDWNthSLC:?" opt; do
 	case $opt in
+	    P)
+		opt_password_hash=1
+		;;
 	    R)
 		logging "INFO" "debug option selected: read-from-file"
 		opt_read_from_file=1
@@ -167,6 +182,30 @@ for val in $files_executables; do
 	fi
 done
 
+if [ "$opt_password_hash" = "1" ]; then
+	echo "Read password from stdin and generate hash for TVinfo account"
+	read -s -t 30 -p "TVinfo password: " tvinfo_password
+	ret=$?
+	if [ $ret -gt 128 ]; then
+		echo "No input given - stop"
+		exit 1
+	fi
+	if [ $ret -ne 0 ]; then
+		echo "Problem occurs - stop"
+		exit 1
+	fi
+	if [ -z "$tvinfo_password" ]; then
+		echo "Password length ZERO - stop"
+		exit 1
+	fi
+
+	echo -n "{MD5}"
+	echo -n "$tvinfo_password" | md5sum | awk '{ print $1 }'
+	echo "Use this hashed password now in $config or config-ng.pl"
+
+	exit 0
+fi
+
 cat "$config" | grep -v '^#' | while IFS=":" read username password folder email other; do
 	if [ -n "$user" -a  "$user" != "$username" ]; then
 		logging "INFO" "skip user: $username"
@@ -194,13 +233,20 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 	fi
 
 	if [ $run_by_cron -eq 0 -o -z "$email" ]; then
-		[ "$opt_debug" = "1" ] && set -x
+		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" -P \"$password\" -F \"$folder\""
 		$script $script_flags -U "$username" -P "$password" -F "$folder" 
-		[ "$opt_debug" = "1" ] && set +x
 	else
 		output="`$script $script_flags -S -L -U "$username" -P "$password" -F "$folder" 2>&1`"
 		if [ -n "$output" ]; then
 			echo "$output" | mail -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username" $email
+		fi
+	fi
+
+	if [ -z "$user" ]; then
+		if [ $run_by_cron -eq 1 ]; then
+			sleep 30
+		else
+			sleep 5
 		fi
 	fi
 done

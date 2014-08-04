@@ -22,6 +22,10 @@ Installation:
 INFO  : list users
 INFO  : List entry: USER:PASS
 
+- copy & adjust config file
+    $ cp config-ng.pl.example config-ng.pl
+    don't forget to review contents
+
 
 ## TVinfo
 - create TVinfo account (if not already existing)
