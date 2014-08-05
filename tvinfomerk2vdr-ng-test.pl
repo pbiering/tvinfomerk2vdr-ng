@@ -193,6 +193,8 @@ $useragent->timeout($networktimeout);
 
 $useragent->proxy('http', $http_proxy);
 
+## channelmap-ng.pl
+our %match_methods;
 
 ###############################################################################
 ## Functions
@@ -585,16 +587,17 @@ if (defined $ReadStationsXML) {
 		close(FILE);
 		logging("NOTICE", "XML contents 'Sender' to file written: " . $WriteStationsXML);
 	};
+
+	if ($xml_raw =~ /encoding="UTF-8"/) {
+		logging ("DEBUG", "XML 'Sender' UTF-8 conversion");
+		$xml_raw = encode("utf-8", $xml_raw);
+	};
 };
 
 if ($opt_X) {
 	print "#### XML NATIVE RESPONSE BEGIN ####\n";
 	print $xml_raw;
 	print "#### XML NATIVE RESPONSE END   ####\n";
-};
-
-if ($xml_raw =~ /encoding="UTF-8"/) {
-	$xml_raw = encode("utf-8", $xml_raw);
 };
 
 # Parse XML content
@@ -701,6 +704,7 @@ logging("INFO", "MeineSender: VDR Channel mapping result (TVinfo-Name -> VDR-ID 
 foreach my $id (sort { lc($tvinfo_MeineSender_id_list{$a}->{'name'}) cmp lc($tvinfo_MeineSender_id_list{$b}->{'name'}) } keys %tvinfo_MeineSender_id_list) {
 	my $vdr_id   = $tvinfo_MeineSender_id_list{$id}->{'vdr_id'};
 	my $name     = $tvinfo_MeineSender_id_list{$id}->{'name'};
+	my $match_method = $tvinfo_MeineSender_id_list{$id}->{'match_method'};
 
 	if (! defined $vdr_id || $vdr_id == 0) {
 		logging("WARN", "MeineSender: no VDR Channel found: " . sprintf("%-20s", $name));
@@ -735,10 +739,12 @@ logging("INFO", "MeineSender amount (summary): " . $MeineSender_count);
 
 $rc = channelmap("tvinfo", \@channels, \%tvinfo_AlleSender_id_list, \%flags_channelmap);
 
-logging("INFO", "AlleSender: VDR Channel mapping result (TVinfo-Name TVinfo-ID Match-Flag(*) VDR-Name VDR-Bouquet") if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channel mapping result (TVinfo-Name TVinfo-ID Match-Type VDR-Name VDR-Bouquet") if (defined $opt_c);
 
 my $AlleSender_count = 0;
 my $AlleSender_count_nomatch = 0;
+my %match_method_stats;
+
 foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvinfo_AlleSender_id_list{$b}->{'name'}) } keys %tvinfo_AlleSender_id_list) {
 	my $vdr_id   = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
 
@@ -754,7 +760,11 @@ foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvin
 	$vdr_bouquet = "" if (! defined $vdr_bouquet);
 
 	my $checked = ""; my $ca = "";
-	$checked = "*" if (defined $tvinfo_MeineSender_id_list{$id}->{'vdr_id'});
+
+	if (defined $tvinfo_MeineSender_id_list{$id}->{'vdr_id'}) {
+		$checked = $tvinfo_MeineSender_id_list{$id}->{'match_method'};
+		$match_method_stats{$checked}++;
+	};
 
 	$ca = "CA" if (${$channels[$vdr_id - 1]}{'ca'} ne "0");
 
@@ -775,6 +785,13 @@ foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvin
 
 	logging("DEBUG", "AlleSender: VDR Channel mapping missing: " . sprintf("%-20s", $name));
 };
+
+# print statistics
+for my $key (sort keys %match_method_stats) {
+	logging("DEBUG", "AlleSender: VDR Channel mapping statistics: " . sprintf("%-20s (%d): %3d", $match_methods{$key}, $key, $match_method_stats{$key}));
+};
+
+
 logging("INFO", "AlleSender amount (cross-check summary): " . $AlleSender_count . " (delta=" . ($AlleSender_count - $MeineSender_count) . " [should be 0] nomatch=" . $AlleSender_count_nomatch ." [station not existing in VDR])");
 
 if (defined $opt_c) {

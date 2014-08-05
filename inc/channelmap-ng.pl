@@ -51,6 +51,15 @@ my %channel_translations = (
 	'BR-alpha'	       =>	'ARD-alpha',
 );
 
+## match method number -> text
+our %match_methods = (
+	"1"	=> "1:1",
+	"2"	=> "translated 1:1",
+	"3"	=> "normalized",
+	"4"	=> "translated+normalized",
+	"6"	=> "1:1 alternative Name",
+);
+
 my $name_vdr;
 
 ## normalize channel names
@@ -286,19 +295,42 @@ sub channelmap($$$;$) {
 
         foreach my $id (keys %$service_id_list_hp) {
 		my $name = $$service_id_list_hp{$id}->{'name'};
+		my $altnames = $$service_id_list_hp{$id}->{'altnames'};
 		my $name_normalized = normalize($name);
 		my $name_translated = $channel_translations{$name};
+		my $match_method = undef;
 
 		my $vdr_id = undef;
 
-		logging("DEBUG", "Channelmap: process service channel name: " . $name);
+		logging("TRACE", "Channelmap: process service channel name: " . $name);
 
 		# search for name in VDR channels 1:1
 		if (defined $vdr_channels_id_by_name{$name}->{'vdr_id'}) {
 			# 1:1 hit
 			logging("DEBUG", "Channelmap: service channel name hit (1:1): " . $name);
 			$vdr_id = $vdr_channels_id_by_name{$name}->{'vdr_id'};
+			$match_method = 1; # 1:1
 			goto('VDR_ID_FOUND');
+		};
+
+		# run through alternative names
+		if (defined $altnames) {
+			logging("TRACE", "Channelmap: process service channel alternative name list: " . $altnames);
+			for my $altname (split '\|', $altnames) {
+				if ($altname eq $name) {
+					# don't check default name again
+					next;
+				};
+				logging("TRACE", "Channelmap: process service channel alternative name: " . $altname);
+
+				if (defined $vdr_channels_id_by_name{$altname}->{'vdr_id'}) {
+					# 1:1 hit
+					logging("DEBUG", "Channelmap: service channel name hit (1:1 alternative name): " . $altname);
+					$vdr_id = $vdr_channels_id_by_name{$altname}->{'vdr_id'};
+					$match_method = 6; # 1:1 alternative name
+					goto('VDR_ID_FOUND');
+				};
+			};
 		};
 
 		# search for name in VDR channels (translated)
@@ -306,6 +338,7 @@ sub channelmap($$$;$) {
 			if (defined $vdr_channels_id_by_name{$name_translated}->{'vdr_id'}) {
 				logging("DEBUG", "Channelmap: service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
 				$vdr_id = $vdr_channels_id_by_name{$name_translated}->{'vdr_id'};
+				$match_method = 2; #  translated 1:1
 				goto('VDR_ID_FOUND');
 			};
 		};
@@ -314,6 +347,7 @@ sub channelmap($$$;$) {
 		if (defined $vdr_channel_name_map_normalized{$name_normalized}) {
 			logging("DEBUG", "Channelmap: service channel name hit (normalized): " . $name . " = " . $vdr_channel_name_map_normalized{$name_normalized});
 			$vdr_id = $vdr_channels_id_by_name{$vdr_channel_name_map_normalized{$name_normalized}}->{'vdr_id'};
+			$match_method = 3; # normalized
 			goto('VDR_ID_FOUND');
 		};
 
@@ -323,6 +357,7 @@ sub channelmap($$$;$) {
 			if (defined $vdr_channel_name_map_normalized{$name_normalized}) {
 				logging("DEBUG", "Channelmap: service channel name hit (translated & normalized): " . $name . " = " . $vdr_channel_name_map_normalized{$name_normalized});
 				$vdr_id = $vdr_channels_id_by_name{$vdr_channel_name_map_normalized{$name_normalized}}->{'vdr_id'};
+				$match_method = 4; # translated+normalized
 				goto('VDR_ID_FOUND');
 			};
 		};
@@ -332,10 +367,11 @@ sub channelmap($$$;$) {
 		next;
 
 VDR_ID_FOUND:
-		logging("DEBUG", "Channelmap: found VDR_ID for service channel name: " . $name . " = " . $vdr_id);
+		logging("DEBUG", "Channelmap: found VDR_ID for service channel name: " . $name . " = " . $vdr_id . " (match method: " . $match_method . ")");
 
 		# set vdr_id;
 		$$service_id_list_hp{$id}->{'vdr_id'} = $vdr_id;
+		$$service_id_list_hp{$id}->{'match_method'} = $match_method;
 
 		next if ($opt_force_hd_channels ne "1");
 
