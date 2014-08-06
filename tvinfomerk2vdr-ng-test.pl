@@ -793,19 +793,36 @@ for my $key (sort keys %match_method_stats) {
 };
 
 logging("INFO", "AlleSender: VDR Channel mapping: " . "=" x 90) if (defined $opt_c);
-logging("INFO", "AlleSender: VDR Channel mapping missing (either deselect in TVinfo 'Meine Sender' or rescan VDR channels or improve channel matcher code") if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channel mapping missing (either deselect in TVinfo 'Meine Sender' or rescan VDR channels or improve channel matcher code)") if (defined $opt_c);
+
 foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvinfo_AlleSender_id_list{$b}->{'name'}) } keys %tvinfo_AlleSender_id_list) {
-	my $vdr_id   = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
+	my $vdr_id = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
 
 	if (defined $vdr_id) {
 		next;
 	};
 
-	my $name     = $tvinfo_AlleSender_id_list{$id}->{'name'};
+	my $name = $tvinfo_AlleSender_id_list{$id}->{'name'};
 
-	logging($loglevel, "AlleSender: VDR Channel mapping missing: " . sprintf("%-20s", $name));
+	logging($loglevel, "AlleSender: VDR Channel mapping missing TVinfo->VDR: " . sprintf("%-20s", $name));
 };
 
+logging("INFO", "AlleSender: VDR Channel mapping: " . "=" x 90) if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channels without mapping to TVinfo (candidates for improvemente channel matcher code)") if (defined $opt_c);
+
+foreach my $channel_hp (@channels) {
+	my $vdr_id = $$channel_hp{'vdr_id'};
+
+	foreach my $id (keys %tvinfo_AlleSender_id_list) {
+		if (defined $tvinfo_AlleSender_id_list{$id}->{'vdr_id'} && $vdr_id == $tvinfo_AlleSender_id_list{$id}->{'vdr_id'}) {
+			next;
+		};
+	};
+
+	my $name = $$channel_hp{'name'};
+
+	logging($loglevel, "AlleSender: VDR Channel mapping missing VDR->TVinfo: " . sprintf("%-20s", $name));
+};
 
 logging("INFO", "AlleSender: VDR Channel mapping: " . "=" x 90) if (defined $opt_c);
 
