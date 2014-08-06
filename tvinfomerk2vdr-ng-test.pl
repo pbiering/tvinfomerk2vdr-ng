@@ -737,9 +737,21 @@ logging("INFO", "MeineSender amount (summary): " . $MeineSender_count);
 	'whitelist_ca_groups'  => $whitelist_ca_groups,
 );
 
+if (defined $opt_c) {
+	$flags_channelmap{'skip_ca_channels'} = 0;
+	$flags_channelmap{'whitelist_ca_groups'} = "*";
+};
+
 $rc = channelmap("tvinfo", \@channels, \%tvinfo_AlleSender_id_list, \%flags_channelmap);
 
-logging("INFO", "AlleSender: VDR Channel mapping result (TVinfo-Name TVinfo-ID Match-Type VDR-Name VDR-Bouquet") if (defined $opt_c);
+my $format_string = "%-25s %3s %3s %2s %2s %2s %-30s %-15s";
+
+my $loglevel = "DEBUG";
+$loglevel = "INFO" if (defined $opt_c);
+
+logging("INFO", "AlleSender: VDR Channel mapping result: TID:TVinfo-ID VID:VDR-ID MM:MatchMethod MS:MeineSender") if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channel mapping: " . sprintf($format_string, "TVinfo-Name", "TID", "VID", "MM", "CA", "MS", "VDR-Name", "VDR-Bouquet")) if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channel mapping: " . "-" x 90) if (defined $opt_c);
 
 my $AlleSender_count = 0;
 my $AlleSender_count_nomatch = 0;
@@ -759,21 +771,29 @@ foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvin
 	my ($vdr_name, $vdr_bouquet) = split /;/, encode("iso-8859-1", decode("utf8", ${$channels[$vdr_id - 1]}{'name'}));
 	$vdr_bouquet = "" if (! defined $vdr_bouquet);
 
-	my $checked = ""; my $ca = "";
+	my $checked = ""; my $ca = ""; my $match_method;
+
+	if (defined $tvinfo_AlleSender_id_list{$id}->{'match_method'}) {
+		$match_method = $tvinfo_AlleSender_id_list{$id}->{'match_method'};
+		$match_method_stats{$match_method}++;
+	};
 
 	if (defined $tvinfo_MeineSender_id_list{$id}->{'vdr_id'}) {
-		$checked = $tvinfo_MeineSender_id_list{$id}->{'match_method'};
-		$match_method_stats{$checked}++;
+		$checked = "*";
 	};
 
 	$ca = "CA" if (${$channels[$vdr_id - 1]}{'ca'} ne "0");
 
-	my $loglevel = "DEBUG";
-	$loglevel = "INFO" if (defined $opt_c);
-
-	logging($loglevel, "AlleSender: VDR Channel mapping: " . sprintf("%-20s %4d %1s %2s %-30s %-15s", $name, $vdr_id, $checked, $ca, $vdr_name, $vdr_bouquet));
+	logging($loglevel, "AlleSender: VDR Channel mapping: " . sprintf($format_string, $name, $id, $vdr_id, $match_method, $ca,  $checked, $vdr_name, $vdr_bouquet));
 };
 
+# print statistics
+for my $key (sort keys %match_method_stats) {
+	logging("DEBUG", "AlleSender: VDR Channel mapping match statistics: " . sprintf("%-20s (%s): %3s", $match_methods{$key}, $key, $match_method_stats{$key}));
+};
+
+logging("INFO", "AlleSender: VDR Channel mapping: " . "=" x 90) if (defined $opt_c);
+logging("INFO", "AlleSender: VDR Channel mapping missing (either deselect in TVinfo 'Meine Sender' or rescan VDR channels or improve channel matcher code") if (defined $opt_c);
 foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvinfo_AlleSender_id_list{$b}->{'name'}) } keys %tvinfo_AlleSender_id_list) {
 	my $vdr_id   = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
 
@@ -783,16 +803,13 @@ foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvin
 
 	my $name     = $tvinfo_AlleSender_id_list{$id}->{'name'};
 
-	logging("DEBUG", "AlleSender: VDR Channel mapping missing: " . sprintf("%-20s", $name));
-};
-
-# print statistics
-for my $key (sort keys %match_method_stats) {
-	logging("DEBUG", "AlleSender: VDR Channel mapping statistics: " . sprintf("%-20s (%d): %3d", $match_methods{$key}, $key, $match_method_stats{$key}));
+	logging($loglevel, "AlleSender: VDR Channel mapping missing: " . sprintf("%-20s", $name));
 };
 
 
-logging("INFO", "AlleSender amount (cross-check summary): " . $AlleSender_count . " (delta=" . ($AlleSender_count - $MeineSender_count) . " [should be 0] nomatch=" . $AlleSender_count_nomatch ." [station not existing in VDR])");
+logging("INFO", "AlleSender: VDR Channel mapping: " . "=" x 90) if (defined $opt_c);
+
+logging("INFO", "AlleSender: VDR Channel mapping cross-check summary: " . $AlleSender_count . " (delta=" . ($AlleSender_count - $MeineSender_count) . " [should be 0] nomatch=" . $AlleSender_count_nomatch ." [stations without matching VDR channels])");
 
 if (defined $opt_c) {
 	logging("NOTICE", "End of Channel Map results (stop here on request)");

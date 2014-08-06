@@ -53,6 +53,7 @@ my %channel_translations = (
 
 ## match method number -> text
 our %match_methods = (
+	""	=> "no-match",
 	"1"	=> "1:1",
 	"2"	=> "translated 1:1",
 	"3"	=> "normalized",
@@ -232,10 +233,12 @@ sub channelmap($$$;$) {
 				next;
 			};
 
-			if (! grep { /^$group$/i } @opt_whitelist_ca_groups) {
-				# group not in whitelist
-				logging("DEBUG", "Channelmap: skip VDR channel(CA): " . sprintf("%4d / %s [%s] (cA group not in whitelist)", $$channel_hp{'vdr_id'}, $name, $group));
-				next;
+			if ($$flags_hp{'whitelist_ca_groups'} ne "*") {
+				if (! grep { /^$group$/i } @opt_whitelist_ca_groups) {
+					# group not in whitelist
+					logging("DEBUG", "Channelmap: skip VDR channel(CA): " . sprintf("%4d / %s [%s] (cA group not in whitelist)", $$channel_hp{'vdr_id'}, $name, $group));
+					next;
+				};
 			};
 		} else {
 			if ($name =~ /^(Sky Select.*)$/o) {
@@ -282,7 +285,7 @@ sub channelmap($$$;$) {
 	};
 
 	# Add normalized channel names
-	foreach my $name (keys %vdr_channels_id_by_name) {
+	foreach my $name (sort keys %vdr_channels_id_by_name) {
 		my $name_normalized = normalize($name);
 		next if (length($name_normalized) == 0);
 
