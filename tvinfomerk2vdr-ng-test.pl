@@ -539,6 +539,9 @@ if (defined $ReadChannelsSvdrp) {
 	};
 };
 
+my %stations_vdr;
+prepare_stations_vdr(\%stations_vdr, \@channels);
+
 
 #######################################
 ## XML 'Sender' handling (stations)

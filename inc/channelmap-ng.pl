@@ -434,4 +434,78 @@ VDR_ID_FOUND_HD:
 	};
 };
 
+## prepare stations_vdr by normalizing VDR channels
+sub prepare_stations_vdr($$) {
+	my $stations_vdr_hp = $_[0];
+	my $channels_vdr_ap = $_[1];
+	logging("DEBUG", "ChannelPrep: start preperation of VDR channels");
+
+        foreach my $channel_hp (@$channels_vdr_ap) {
+		my $vpid_extracted;
+		my $hd_info = "";
+
+		logging("TRACE", "ChannelPrep: analyze channel name:'" . $$channel_hp{'name'} . "' vpid:" . $$channel_hp{'vpid'});
+
+		if ($$channel_hp{'vpid'} =~ /^([0-9]+)(\+[^=]+)?=([0-9]+)$/) {
+			$vpid_extracted = $1;
+			if ($3 != 2) {
+				$hd_info = "HD";
+			}
+		} elsif ($$channel_hp{'vpid'} =~ /^([0-9]+)$/) {
+			# fallback
+			$vpid_extracted = $1;
+		};
+
+		if ($vpid_extracted eq "0" || $vpid_extracted eq "1") {
+			# skip (encrypted) radio channels
+			logging("TRACE", "ChannelPrep: skip VDR channel(radio): " . sprintf("%4d / %s", $$channel_hp{'vdr_id'}, $$channel_hp{'name'}));
+			next;
+		};
+
+		my ($name, $group) = split /;/, $$channel_hp{'name'};
+
+		if ($name eq ".") {
+			# skip (encrypted) radio channels
+			logging("TRACE", "ChannelPrep: skip VDR channel with only '.' in name: " . sprintf("%4d / %s", $$channel_hp{'vdr_id'}, $$channel_hp{'name'}));
+			next;
+		} elsif ($name =~ /^[0-9]{3} - [0-9]{2}\|[0-9]{2}$/) {
+			# skip (encrypted) radio channels
+			logging("TRACE", "ChannelPrep: skip VDR channel with time-based name: " . sprintf("%4d / %s", $$channel_hp{'vdr_id'}, $$channel_hp{'name'}));
+			next;
+		};
+
+		$group = "" if (! defined $group); # default
+
+		$name = encode("iso-8859-1", decode("utf8", $name)); # convert charset
+		$group = encode("iso-8859-1", decode("utf8", $group)); # convert charset
+
+		my $ca_info = "";
+
+		if ($$channel_hp{'ca'} ne "0") {
+			$ca_info = "CA";
+		};
+
+		my @altnames = split /,/, $name;
+
+		if (scalar(@altnames) > 1) {
+			$name = shift @altnames;
+		} else {
+			undef @altnames;
+		};
+
+		if ($$channel_hp{'vpid'} =~ /^([0-9]+)$/) {
+			# fallback for HD detection
+			if ($name =~ / HD$/) {
+				$hd_info = "HDFB";
+			};
+		};
+
+		my $source = substr($$channel_hp{'source'}, 0, 1); # first char of source
+
+		logging("DEBUG", "ChannelPrep: prepare channel name: " . sprintf("%-35s %-20s %2s %-4s vpid:%-11s %s", $name, $group, $ca_info, $hd_info, $$channel_hp{'vpid'}, join(',', @altnames)));
+
+		#logging("DEBUG", "Channelmap: found VDR_ID for forced-to-HD service channel name: " . $name . " = " . $vdr_id);
+	};
+};
+
 return 1;
