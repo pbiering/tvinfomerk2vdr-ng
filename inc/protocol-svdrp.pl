@@ -1,3 +1,5 @@
+# Project: tvinfomerk2vdr-ng.pl
+#
 # Support functions for SVDRP backends like VDR API
 #
 # (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>

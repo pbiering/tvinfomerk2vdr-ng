@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+# Project: tvinfomerk2vdr-ng.pl
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
@@ -17,6 +17,7 @@
 # 20131106/bie: skip channel with name "." (found in boutique "BASIS 1")
 # 20140630/bie: add static mapping for new "ARD-alpha" (replacing "BR-alpha") and "TV5", blacklist "Sky Select" if (opt_skip_ca_channels==1)
 # 20141108/bie: some rework and rename file to support-channelmap.pl
+# 20141122/bie: catch also "NDR MV", do not overwrite first-hit in normalized map - display message instead
 
 use strict;
 use warnings;
@@ -393,128 +394,6 @@ DVR_ID_FOUND_HD:
 	};
 };
 
-## prepare stations_vdr by normalizing DVR channels
-sub prepare_stations_vdr($$) {
-	my $stations_hp = $_[0];
-	my $channels_ap = $_[1];
-	logging("DEBUG", "ChannelPrep: start preperation of DVR channels");
 
-        foreach my $channel_hp (@$channels_ap) {
-		my $vpid_extracted;
-		my $hd = 0;
-		my $ca = 0;
-
-		logging("TRACE", "ChannelPrep: analyze channel name:'" . $$channel_hp{'name'} . "' vpid:" . $$channel_hp{'vpid'});
-
-		if ($$channel_hp{'vpid'} =~ /^([0-9]+)(\+[^=]+)?=([0-9]+)$/) {
-			$vpid_extracted = $1;
-			if ($3 != 2) {
-				$hd = 1;
-			}
-		} elsif ($$channel_hp{'vpid'} =~ /^([0-9]+)$/) {
-			# fallback
-			$vpid_extracted = $1;
-		};
-
-		if ($vpid_extracted eq "0" || $vpid_extracted eq "1") {
-			# skip (encrypted) radio channels
-			logging("TRACE", "ChannelPrep: skip DVR channel(radio): " . sprintf("%4d / %s", $$channel_hp{'cid'}, $$channel_hp{'name'}));
-			next;
-		};
-
-		my ($name, $group) = split /;/, $$channel_hp{'name'};
-
-		if ($name eq ".") {
-			# skip (encrypted) radio channels
-			logging("TRACE", "ChannelPrep: skip DVR channel with only '.' in name: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $$channel_hp{'name'}));
-			next;
-		} elsif ($name =~ /^[0-9]{3} - [0-9]{2}\|[0-9]{2}$/) {
-			# skip (encrypted) radio channels
-			logging("TRACE", "ChannelPrep: skip DVR channel with time-based name: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $$channel_hp{'name'}));
-			next;
-		};
-
-		$group = "" if (! defined $group); # default
-
-		$name = encode("iso-8859-1", decode("utf8", $name)); # convert charset
-		$group = encode("iso-8859-1", decode("utf8", $group)); # convert charset
-
-		my $ca_info = "";
-
-		if ($$channel_hp{'ca'} ne "0") {
-			$ca = 1;
-		};
-
-		my @altnames = split /,/, $name;
-
-		if (scalar(@altnames) > 1) {
-			$name = shift @altnames;
-		} else {
-			undef @altnames;
-		};
-
-		if ($$channel_hp{'vpid'} =~ /^([0-9]+)$/) {
-			# fallback for HD detection
-			if ($name =~ / HD$/) {
-				$hd = 2;
-			};
-		};
-
-		my $source = substr($$channel_hp{'source'}, 0, 1); # first char of source
-
-		my $id = $$channel_hp{'cid'};
-
-		logging("TRACE", "ChannelPrep: prepare channel name: " . sprintf("%-35s %-20s %2s %-4s %4s %s", $name, $group, $ca_info{$ca}, $hd_info{$hd}, $id, join(',', @altnames)));
-
-		#logging("DEBUG", "Channelmap: found DVR_ID for forced-to-HD service channel name: " . $name . " = " . $cid);
-
-		$$stations_hp{$id}->{'name'}          = $name;
-		$$stations_hp{$id}->{'group'}         = $group;
-		$$stations_hp{$id}->{'ca'}            = $ca;
-		$$stations_hp{$id}->{'hd'}            = $hd;
-		$$stations_hp{$id}->{'altnames'}      = join(',', @altnames);
-		$$stations_hp{$id}->{'norm_name'}     = normalize($name);
-		$$stations_hp{$id}->{'norm_altnames'} = normalize(join(',', @altnames));
-	};
-
-	# print table
-	my $format_string = "%-35s %-20s %2s %-4s %4s %s (%s)";
-	logging("DEBUG", "ChannelPrep/DVR: " . sprintf($format_string, "name", "group", "ca", "hd", "id", "altnames", "normalized names"));
-
-	for my $id (sort { $$stations_hp{$a}->{'group'} cmp $$stations_hp{$b}->{'group'} } sort { lc($$stations_hp{$a}->{'name'}) cmp lc($$stations_hp{$b}->{'name'}) } keys %$stations_hp) {
-		logging("DEBUG", "ChannelPrep/DVR: " . sprintf($format_string, $$stations_hp{$id}->{'name'}, $$stations_hp{$id}->{'group'}, $ca_info{$$stations_hp{$id}->{'ca'}}, $hd_info{$$stations_hp{$id}->{'hd'}}, $id, $$stations_hp{$id}->{'altnames'}, $$stations_hp{$id}->{'norm_name'} . "," . $$stations_hp{$id}->{'norm_altnames'}));
-	};
-};
-
-
-## prepare stations_vdr by normalizing DVR channels
-sub prepare_stations_tvinfo($$) {
-	my $stations_hp = $_[0];
-	my $channels_hp = $_[1];
-
-	logging("DEBUG", "ChannelPrep/TVinfo: start preperation of channels");
-
-        foreach my $channel_hp (keys %$channels_hp) {
-		my $id = $channel_hp;
-		my $name = $$channels_hp{$id}->{'name'};
-		my @altnames = grep(!/^$name$/, split /,/, $$channels_hp{$id}->{'altnames'}); # filter duplicate $name
-
-		logging("TRACE", "ChannelPrep/TVinfo: prepare channel name: " . sprintf("%-35s %4s %s", $name, $id, join(',', @altnames)));
-
-		$$stations_hp{$id}->{'name'}          = $name;
-		$$stations_hp{$id}->{'altnames'}      = join(',', @altnames);
-		$$stations_hp{$id}->{'norm_name'}     = normalize($name);
-		$$stations_hp{$id}->{'norm_altnames'} = normalize(join(',', @altnames));
-	};
-
-	# print table
-	my $format_string = "%-35s %4s %s (%s)";
-	logging("DEBUG", "ChannelPrep/TVinfo: " . sprintf($format_string, "name", "id", "altnames", "normalized names"));
-
-	for my $id (sort { lc($$stations_hp{$a}->{'name'}) cmp lc($$stations_hp{$b}->{'name'}) } keys %$stations_hp) {
-		logging("DEBUG", "ChannelPrep/TVinfo: " . sprintf($format_string, $$stations_hp{$id}->{'name'}, $id, $$stations_hp{$id}->{'altnames'}, $$stations_hp{$id}->{'norm_name'} . "," . $$stations_hp{$id}->{'norm_altnames'}));
-	};
-	die;
-};
-
+## END
 return 1;

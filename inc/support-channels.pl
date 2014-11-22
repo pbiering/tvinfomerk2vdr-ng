@@ -1,14 +1,16 @@
+# Project: tvinfomerk2vdr-ng.pl
+#
 # Support functions for channels
-# #
-# # (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
-# #
-# # License: GPLv2
-# #
-# # Authors:
-# #  Peter Bieringer (bie)
-# #
-# # Changelog:
-# # 20141107/bie: new
+#
+# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+#
+# License: GPLv2
+#
+# Authors:
+#  Peter Bieringer (bie)
+#
+# Changelog:
+# 20141107/bie: new
 
 use strict;
 use warnings;
