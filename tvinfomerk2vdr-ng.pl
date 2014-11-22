@@ -31,6 +31,7 @@
 # 20140709/pb: fix broken handling in case of multiple users select same timer in folder mode
 # 20140802/pb: use new Station XML URL instead of HTML "Meine Sender"
 # 20140804/pb: add support for MD5 hashed password
+# 201411xx/pb: complete reorg, support now also DVR tvheadend via HTSP
 
 use strict; 
 use warnings; 
@@ -38,20 +39,18 @@ use utf8;
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
-my $progname = "tvinfomerk2vdr-ng";
-my $progversion = "0.1.0";
+our $progname = "tvinfomerk2vdr-ng";
+our $progversion = "1.0.0";
 
 ## Requirements:
 # Ubuntu: libxml-simple-perl libdate-calc-perl
 # Fedora: perl-XML-Simple perl-Date-Calc perl-Sys-Syslog
 
 ## Extensions (in difference to original version):
-# - Multi-tvinfo account capable
+# - Multi-SERVICE account capable
 # - Only required timer changes are executed (no longer unconditional remove/add)
 # - Optional definition of a folder for storing records (also covering multi-account capability)
-# - VDR timer cache
-# - sophisticated automagic TVinfo->VDR channel mapping
-# - XML 'Merkliste' is now the only supported input (simplifies date/time handling)
+# - sophisticated automagic SERVICE->DVR channel mapping
 # - use strict/warnings for improving code quality
 # - debugging/tracing/logging major improvement
 
@@ -60,45 +59,40 @@ my $progversion = "0.1.0";
 # - manual channel mapping
 # - support of 'tviwantgenrefolder' and 'tviwantseriesfolder' removed (for easier Multi-Account/Folder capability)
 
-## Testcases
-# same timer configured in more than one account
-# timer between 4:00-4:59 and 5:00-5:59 to check proper day wrapping
-
-## TODO
-# - check whether "Wintertimer->Summertime" and "Summertime->Wintertime" are proper catched
-# - reintroduce support of 'tviwantgenrefolder' and 'tviwantseriesfolder' (must be stored also in summary somehow to be able to recreate title)
-# - store original title also in summary (should help on some title matching problems)
+## TODO (in case of needed)
 # - add option for custom channel map (in predecence of automatic channelmap)
-#     dedicated txt file with tvinfoname=VDRNAME|RFC-ID
+#     dedicated txt file with SERVICE-CHANNEL-NAME=DVR-CHANNEL-NAME
 
 ## Setup
 #
-# Check station configuration (Meine Sender) match
-#  ./tvinfomerk2vdr-ng-wrapper.sh -c -N -u USER (reported delta should be 0, otherwise the match alogrithm has an issue or too few or many stations are marked in TVinfo portal while not existing in VDR
+# Check channel mapping (-c)
+# Display channel suggestions (--scs)
 
 ## Test
 #
-# - check for non-empty 'Merkzettel'
+# - check for non-empty timer list on SERVICE
 # - run script in dry-run mode
 #    ./tvinfomerk2vdr-ng-wrapper.sh -N -u USER
 
 ## Workflow
-# - read channel list via SVDRP
-# - read XML 'Sender'
-# - perform a VDR to TVinfo station/channel alignment
-# - read XML 'Merkliste'
-# - retrive existing VDR timers created by tvinfo
-# - run through candidate timers and check for match in existing VDR timers
-#    in case of existing but not in Merkliste of given user, add related user/folder info and adjust folder
-# - run through existing VDR timers, check against candidate status
-#    mark "to-update" ones for deletion (and re-add) in case one of the user has deleted the entry in tvinfo while other still have included
-#    mark no longer existing ones for deletion
-# - delete marked existing timers
-# - add list of new timers
+# - retrieve channels from SERVICE
+# - retrieve channels vrom DVR
+# - perform a SERVICE to DVR channel mapping
+# - retrieve timers from SERVICE
+# - retrieve timers from DVR
+# - run through SERVICE timers and check for match in existing DVR timers
+#    skip timers in the past
+#    take care about margins, channel mappings and whether created before by this tool
+#    in case of missing, put on TODO-ADD list
+# - run through DVR timers, check for left-overs
+#    take care about margins, channel mappings and whether created before by this tool
+#    in case of no longer matching SERVICE list, put on TODO-DELETE list
+# - delete marked timers on DVR
+# - add new timers on DVR (in case of tvheadend this can also lead to new configurations)
 
 ###############################################################################
 #
-# Initialisierung
+# Initialization
 #
 my $file_config = "config-ng.pl";
 
@@ -106,65 +100,48 @@ push (@INC, "./");
 require ($file_config);
 
 push (@INC, "./inc");
-require ("helperfunc-ng.pl");
-require ("channelmap-ng.pl");
+require ("logging.pl");
+require ("support-dvr.pl");
+require ("support-channels.pl");
+require ("support-channelmap.pl");
 
-use LWP;
-use Date::Manip;
-use Date::Calc qw(Add_Delta_Days);
-&Date_Init("Language=German","DateFormat=non-US");
-
-use Getopt::Std;
-use IO::Socket;
-use Digest::MD5 qw(md5_hex);
-use XML::Simple;
-use Data::Dumper;
-use HTTP::Request::Common;
-use Encode;
 use Sys::Syslog;
+use Getopt::Long;
 
-our ($SOCKET,$SVDRP); 
-our $please_exit = 0;
-my $useragent = LWP::UserAgent->new;
+my $result;
 
-my $today = UnixDate("heute", "%s");
-my $MarginStart;
-my $MarginStop;
+our $debug = 0;
 
-my $request;
-my $resonse;
-my $url;
+our $foldername_max = 15;
 
-my $debug = 0;
 
-my $foldername_max = 15;
-
-my $http_timeout = 15;
-
-my %debug_class = (
+our %debug_class = (
 	"XML"         => 0,
 	"CORR"        => 0,
 	"VDR-CH"      => 0,
 	"MATCH"       => 0,
 	"VDR"         => 0,
+	"SVDRP"       => 0,
+	"HTSP"        => 0,
+	"CHANNELS"    => 0,
+	"TVINFO"      => 0,
 	"Channelmap"  => 0,
 	"MeineSender" => 0,
 	"AlleSender"  => 0,
 );
 
-$SIG{'INT'}  = \&SIGhandler;
+#$SIG{'INT'}  = \&SIGhandler;
+#my $http_timeout = 15;
 
 # getopt
-our ($opt_R, $opt_W, $opt_X, $opt_h, $opt_v, $opt_N, $opt_s, $opt_d, $opt_p, $opt_D, $opt_U, $opt_P, $opt_F, $opt_T, $opt_C, $opt_c, $opt_L, $opt_S);
+our ($opt_R, $opt_W, $opt_X, $opt_h, $opt_v, $opt_N, $opt_d, $opt_p, $opt_D, $opt_U, $opt_P, $opt_F, $opt_T, $opt_C, $opt_c, $opt_L, $opt_S, $opt_u, $opt_K, $opt_E);
 
 ## config-ng.pl
 our $http_proxy;
 our $username;
 our $password;
-our $tvinfoprefix;
-our $http_base;
 our ($prio, $lifetime);
-our $setupfile;
+our $setupfile;			# will be mapped to $config{"dvr." . $setup{'dvr'} . ".file.setup"}
 our $networktimeout;
 our $skip_ca_channels;
 our $whitelist_ca_groups;
@@ -173,24 +150,55 @@ our $whitelist_ca_groups;
 if (! defined $skip_ca_channels) { $skip_ca_channels = 1 };
 if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
 
-# Cache for VDR timers
-my %timers_cache;
 
-# TVinfo Channel Name <-> ID
-my %tvinfo_channel_name_by_id;
-my %tvinfo_channel_id_by_name;
+###############################################################################
+## New Structure
+###############################################################################
 
-# TVinfo 'Meine Sender' ID List
-my %tvinfo_MeineSender_id_list;
+## define defaults
+my @service_list_supported = ("tvinfo");
+my @dvr_list_supported      = ("vdr", "tvheadend");
+my @system_list_supported   = ("reelbox", "openelec");
 
-# TVinfo 'Alle Sender' ID List
-my %tvinfo_AlleSender_id_list;
+## define configuration
+our %config;
 
-# Defaults for web access
-$useragent->agent("Mozilla/4.0 ($progname $progversion)");
-$useragent->timeout($networktimeout);
+# migration from config-ng.pl
+$config{'proxy'} = $http_proxy;
 
-$useragent->proxy('http', $http_proxy);
+## define setup
+my %setup;
+
+$setup{'service'} = "tvinfo"; # default (only one supported so far)
+
+
+## define debug/trace
+our %debugclass;
+our %traceclass;
+our $verbose = 0;
+
+$debugclass{'HTSP'} = 1;
+$debugclass{'TVHEADEND'} = 1;
+$debugclass{'TVINFO'} = 1;
+$traceclass{'HTSP'} = 0;
+	#$traceclass{'HTSP'} |= 0x00000002; # JSON dump adapters
+	#$traceclass{'HTSP'} |= 0x00000020; # JSON dump stations
+	#$traceclass{'HTSP'} |= 0x00000100; # JSON dump timers raw
+	#$traceclass{'HTSP'} |= 0x00000200; # JSON dump timers
+	#$traceclass{'HTSP'} |= 0x00001000; # JSON dump channels raw
+	#$traceclass{'HTSP'} |= 0x00002000; # JSON dump channels
+	#$traceclass{'HTSP'} |= 0x00010000; # JSON dump confignames raw
+	#$traceclass{'HTSP'} |= 0x00020000; # JSON dump confignames
+	#$traceclass{'HTSP'} |= 0x00040000; # JSON dump config raw
+	#$traceclass{'HTSP'} |= 0x00080000; # JSON dump config
+	# 0x0001: JSON raw dump adapters
+	# 0x0010: JSON raw dump stations
+	# 0x1000: skipped channels hardcoded blacklist
+	# 0x2000: skipped channels (missing typestr)
+	# 0x4000: skipped channels (not enabled)
+
+$traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
+
 
 
 ###############################################################################
@@ -202,113 +210,6 @@ my $syslog_status = 0;
 my @logging_summary;
 my $logging_highestlevel = 7;
 
-my %loglevels = (
-	"EMRG"     => 0,
-	"ALERT"    => 1,
-	"CRIT"     => 2,
-	"ERR"      => 3,
-	"ERROR"    => 3,
-	"WARN"     => 4,
-	"WARNING"  => 4,
-	"NOTICE"   => 5,
-	"INFO"     => 6,
-	"DEBUG"    => 7,
-	"TRACE"    => 7,
-);
-
-
-sub logging($$) {
-	return if ($_[0] eq "DEBUG" && $debug == 0);
-	return if ($_[0] eq "TRACE" && ! defined $opt_T);
-
-	my $level = $_[0];
-	my $message = $_[1];
-
-	my $loglevel;
-
-	if (! defined $loglevels{$level}) {
-		# loglevel not supported
-		$loglevel = 4;
-	} else {
-		$loglevel = $loglevels{$level};
-	};
-
-	if (($debug != 0) && ($level =~ /^(DEBUG|TRACE)$/o)) {
-		# check for debug class
-		for my $key (keys %debug_class) {
-			if ($_[1] =~ /^$key/ && ($debug_class{$key} == 0)) {
-				return;
-			};
-		};
-	};
-
-	if ((defined $opt_S) && ($level !~ /^(DEBUG|TRACE)$/o)) {
-		push @logging_summary, $message;
-
-		if ($loglevel < $logging_highestlevel) {
-			# remember highest level
-			$logging_highestlevel = $loglevel;
-		};
-	};
-
-	if (defined $opt_L) {
-		# use syslog
-		if ($syslog_status != 1) {
-			openlog($progname, undef, "LOG_USER");
-			$syslog_status = 1;
-		};
-
-		# map log level
-		if ($level eq "TRACE") {
-			$level = "DEBUG";
-		};
-		if ($level eq "WARN") {
-			$level = "WARNING";
-		};
-		if ($level eq "ERROR") {
-			$level = "ERR";
-		};
-
-		if (defined $username) {
-			$message = $username . ": " . $message;
-		};	
-
-		syslog($level, '%s', $message);
-	} else {
-		printf STDERR "%-6s: %s\n", $level, $message;
-	};
-};
-
-
-## Create a combined folder name from list of folders
-# if any of the given folder = ".", then the result is also "."
-# if array is empty, also return "."
-sub createfoldername(@) {
-	if (scalar(@_) == 0) {
-		return(".");
-	};
-
-	my %uniq;
-	foreach my $folder (@_) {
-		# store entries in hash, automatic remove duplicates
-		$uniq{$folder} = 1;
-	};
-
-	my $length_entry = $foldername_max / scalar(keys %uniq);
-
-	logging("TRACE", "FOLDER: foldername_max=" . $foldername_max . " length_entry=" . $length_entry . " list-of-folders: " . join(",", keys %uniq));
-
-	my $result = "";
-	for my $folder (sort keys %uniq) {
-		if ($folder eq ".") {
-			$result = ".";
-			last;
-		};
-		$result .= substr($folder, 0, $length_entry);
-	};
-	
-	return ($result);
-};
 
 ## replace tokens in request
 sub request_replace_tokens($) {
@@ -333,72 +234,297 @@ sub request_replace_tokens($) {
 	return($request)
 };
 
+sub help() {
+	my $debug_class_string = join(" ", keys %debug_class);
+	my $service_list_supported_string = join(" ", @service_list_supported);
+	my $dvr_list_supported_string      = join(" ", @dvr_list_supported);
+	my $system_list_supported_string   = join(" ", @system_list_supported);
 
-###############################################################################
-#
-# Main
-#
-my $debug_class_string = join(" ", keys %debug_class);
-
-my $Usage = qq{
+	print qq{
 Usage: $0 [options]
 
-Options: -d <hostname>             VDR hostname (default: localhost)
-         -p <port>                 SVDRP port number (default: 2001)
-         -U <username>             TVinfo username (default: $username [config-ng.pl])
-         -P <password>             TVinfo password (default: $password [config-ng.pl])
-         -F <folder>               folder for VDR records (default: none)
-         -c                        show Channel Map results (and stop)
+Options: 
          -L                        use syslog instead of stderr
          -S                        show summary to stdout in case of any changes or log messages > notice
          -h	                   Show this help text
+         --pc	                   Print Config (and stop)
+
+Service related
+         --service <name>          define SERVICE name
+                                     default/configured: $setup{'service'}
+                                     supported         : $service_list_supported_string
+         -U <username>             SERVICE username (default: $username [config-ng.pl])
+         -P <password>             SERVICE password (default: $password [config-ng.pl])
+
+DVR related
+         --dvr <type>              define DVR type
+                                     default/configured: $setup{'dvr'}
+                                     supported         : $dvr_list_supported_string
+         -d|--host <hostname>      DVR hostname (default: $config{'dvr.host'})
+         -p <port>                 SVDRP/HTSP port number (default: 2001/9981)
+         -F|--folder <folder>      folder for DVR records (default: none)
+
+System related
+         --system <type>           define SYSTEM type
+                                     default/configured: $setup{'system'}
+                                     supported         : $system_list_supported_string
+
+Channel Mapping
+         -c                        show Channel Map results (and stop)
+         -u                        show unfiltered Channel Map results (and stop)
+         --scs                     Show Channelmap Suggestions
 
 Debug options:
          -v                        Show verbose messages
-         -s	                   Simulation Mode (no SVDRP communication)
          -D	                   Debug Mode
          -T	                   Trace Mode
          -C class[,...]            Debug Classes: $debug_class_string
          -X	                   XML Debug Mode
-         -N	                   No SVDRP change action (do not delete/add timers)
-         -W <prefix>               Write XML raw responses to   files (suffices will be added automatically)
-         -R <prefix>               Read  XML raw responses from files (suffices will be added automatically)
+         -N	                   No real DVR change action (do not delete/add timers but write an action fike)
+         -W                        Write (all)  raw responses to files
+         --wstf                    Write (only) Service raw responses To File(s)
+         --wdtf                    Write (only) Dvr raw responses To File(s)
+         -R                        Read  (all)  raw responses from files
+         --rsff                    Read  (only) SERVICE raw responses from file(s)
+         --rdff                    Read  (only) DVR raw responses from file(s)
+         -K|--sdt <list>           skip DVR timer entries with number from comma separated list
+         -E|--sst <list>           skip SERVICE timer entries with number from comma separated list
+         -O|--property key=value   define a config property
+         --prefix <prefix> Prefix for read/write files (raw responses)
+};
+	print "\n";
 };
 
-my $sim = 0;
-my $get = 0;
-my $verbose = 0;
+###############################################################################
+###############################################################################
+# Main
+###############################################################################
+###############################################################################
 
-die $Usage if (!getopts('W:R:d:p:U:P:F:hLvscDXNSTC:') || $opt_h);
+###############################################################################
+# Options parsing
+###############################################################################
+my ($opt_service, $opt_system, $opt_dvr, @opt_properties);
+my ($opt_read_service_from_file, $opt_read_dvr_from_file);
+my ($opt_write_service_to_file, $opt_write_dvr_to_file);
+my ($opt_show_channelmap_suggestions);
+my ($opt_prefix);
+my ($opt_print_config);
 
+Getopt::Long::config('bundling');
+
+my $options_result = GetOptions (
+	"L"		=> \$opt_L,
+	"v"		=> \$opt_v,
+	"S"		=> \$opt_S,
+
+	# DVR
+	"d=s" 		=> \$opt_d,
+	"p=i"		=> \$opt_p,
+	"F|folder=s"	=> \$opt_F,
+	"K|sdt:s"	=> \$opt_K,
+
+	# SERVICE
+	"U=s"		=> \$opt_U,
+	"P=s"		=> \$opt_P,
+	"E|sst:s"	=> \$opt_E,
+
+	"service=s"	=> \$opt_service,
+	"system=s"	=> \$opt_system,
+	"dvr=s"		=> \$opt_dvr,
+
+	# Channelmap
+	"c"		=> \$opt_c,
+	"u"		=> \$opt_u,
+	"scs"		=> \$opt_show_channelmap_suggestions,
+
+	# general debug
+	"C:s"		=> \$opt_C,
+	"T"		=> \$opt_T,
+
+	# debug (read/write from/to file)
+	"D"		=> \$opt_D,
+	"X"		=> \$opt_X,
+	"N"		=> \$opt_N,
+	"W"		=> \$opt_W,
+	"R"		=> \$opt_R,
+	"rsff"		=> \$opt_read_service_from_file,
+	"rdff"		=> \$opt_read_dvr_from_file,
+	"wstf"		=> \$opt_write_service_to_file,
+	"wdtf"		=> \$opt_write_dvr_to_file,
+	"prefix"	=> \$opt_prefix,
+
+	"O|property=s@"	=> \@opt_properties,
+	"h|help|\?"	=> \$opt_h,
+);
+
+if ($options_result != 1) {
+	print "Error in command line arguments (see -h|help|?)\n";
+	exit 1;
+};
+
+if (defined $opt_h) {
+	help();
+	exit 1;
+};
+
+
+###############################################################################
+# Options validation
+###############################################################################
+
+## --service
+if (defined $opt_service) {
+	if (! grep(/^$opt_service$/, @service_list_supported)) {
+		print "ERROR : unsupported SERVICE: " . $opt_service . "\n";
+		exit 2;
+	};
+	$setup{'service'} = $opt_service;
+};
+
+## --dvr
+if (defined $opt_dvr) {
+	if (! grep(/^$opt_dvr$/, @dvr_list_supported)) {
+		print "ERROR : unsupported DVR: " . $opt_dvr . "\n";
+		exit 2;
+	};
+	$setup{'dvr'} = $opt_dvr;
+};
+
+## --system
+if (defined $opt_system) {
+	if (! grep(/^$opt_system$/, @system_list_supported)) {
+		print "ERROR : unsupported SYSTEM: " . $opt_system . "\n";
+		exit 2;
+	};
+	$setup{'system'} = $opt_system;
+};
+
+## --property
+if (scalar (@opt_properties) > 0) {
+	foreach my $keyvalue (@opt_properties) {
+		my ($key, $value) = split("=", $keyvalue, 2);
+		if ((! defined $key) || (! defined $value)) {
+			print "ERROR : unsupported property: " . $keyvalue . "\n";
+			exit 2;
+		};
+		$config{$key} = $value;
+	};
+};
+
+## --host
+if (defined $opt_d) {
+	$config{'dvr.host'} = $opt_d;
+};
+if (! defined $config{'dvr.host'}) {
+	$config{'dvr.host'} = "localhost";
+};
+
+## --port
+if (defined $opt_p) {
+	if ($opt_p =~ /^[0-9]{3,5}$/o) {
+		$config{'dvr.port'} = $opt_p;
+	} else {
+		print "ERROR : unsupported port: " . $opt_p . "\n";
+		exit 2;
+	};
+};
+
+## --prefix
+if (defined $opt_prefix) {
+	$config{'dvr.source.file.prefix'} = $opt_prefix;
+} else {
+	$config{'dvr.source.file.prefix'} = "";
+};
+
+## -F/--folder
+if (defined $opt_F) {
+	if ($opt_F =~ /^[0-9a-z]+$/io) {
+		$config{'dvr.folder'} = $opt_F;
+	} else {
+		print "ERROR : unsupported folder: " . $opt_F . "\n";
+		exit 2;
+	};
+};
+
+
+## load required related modules
+require("inc/system-"  . $setup{'system'}  . ".pl");
+require("inc/dvr-"     . $setup{'dvr'}     . ".pl");
+require("inc/service-" . $setup{'service'} . ".pl");
+
+## map old config-ng.pl values to new structure
+if (defined $setupfile) {
+	$config{"dvr." . $setup{'dvr'} . ".file.setup"} = $setupfile;
+};
+
+## Debug/verbose options
 $verbose = 1 if $opt_v;
-$sim = 1 if $opt_s;
-my $svdrp_ro = 0; $svdrp_ro = 1 if defined $opt_N;
-
 $debug = 1 if $opt_D;
-my $debug_xml = 0; $debug_xml = 1 if $opt_X;
-my $Dest = $opt_d  || "localhost";
-my $Port = $opt_p  || 2001;
-my $WriteFileBase = $opt_W;
-my $ReadFileBase = $opt_R;
-my $folder = ""; $folder = $opt_F if $opt_F;
 
+
+## debug: raw file read/write handling
+# -R is covering all
+$opt_read_service_from_file = 1 if (defined $opt_R);
+$opt_read_dvr_from_file     = 1 if (defined $opt_R);
+
+# -W is covering all
+$opt_write_service_to_file  = 1 if (defined $opt_W);
+$opt_write_dvr_to_file      = 1 if (defined $opt_W);
+
+if (defined $opt_read_service_from_file && $opt_write_service_to_file) {
+	die "read from and write to file for SERVICE can't be used at the same time";
+};
+if (defined $opt_read_dvr_from_file && $opt_write_dvr_to_file) {
+	die "read from and write to file for DVR can't be used at the same time";
+};
+
+# defaults
+$config{'service.source.type'} = "network";
+$config{'dvr.source.type'}     = "network";
+
+# define properties according to options
+$config{'dvr.source.type'}     = "file" if (defined $opt_read_dvr_from_file);
+$config{'service.source.type'} = "file" if (defined $opt_read_service_from_file);
+
+$config{'dvr.source.type'}     = "network+store" if defined ($opt_write_dvr_to_file);;
+$config{'service.source.type'} = "network+store" if defined ($opt_write_service_to_file);
+
+## debug: action handling
+if (defined $opt_N) {
+	$config{'dvr.destination.type'} = "file";
+} else {
+	$config{'dvr.destination.type'} = "network";
+};
+
+## SERVICE user/pass handling
 $username = $opt_U if $opt_U;
 $password = $opt_P if $opt_P;
 
 if (! defined $username || $username eq "<TODO>") {
-	logging("ERROR", "TVinfo username not defined (use -U or specify in " . $file_config . ")");
+	logging("ERROR", "SERVICE username not defined (use -U or specify in " . $file_config . ")");
 	exit 1;
 };
 
-if (! defined $password || $password eq "<TODO>") {
-	logging("ERROR", "TVinfo password not defined (use -P or specify in " . $file_config . ")");
-	exit 1;
+if ($config{'service.source.type'} ne "file") {
+	if (! defined $password || $password eq "<TODO>") {
+		logging("ERROR", "SERVICE password not defined (use -P or specify in " . $file_config . ")");
+		exit 1;
+	};
+
+	if ($setup{'service'} eq "tvinfo") {
+		# TODO: move such option checks in service module
+		if ($password !~ /^{MD5}/) {
+			logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
+		};
+	};
 };
 
-if ($password !~ /^{MD5}/) {
-	logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
-};
+$config{'service.user'}     = $username;
+$config{'service.password'} = $password;
+
+# defaults for read/write raw files
+$config{'service.source.file.prefix'}  = $setup{'service'} . "-" . $config{'service.user'};
 
 
 # Debug Class handling
@@ -413,1008 +539,613 @@ if (defined $opt_C) {
 	};
 };
 
-my ($WriteScheduleXML, $ReadScheduleXML, $WriteStationsXML, $ReadStationsXML);
 
-if (defined $WriteFileBase) {
-	$WriteScheduleXML         = $WriteFileBase . "-Schedule.xml";
-	$WriteStationsXML         = $WriteFileBase . "-Stations.xml";
+###############################################################################
+# Reading external values
+###############################################################################
+
+dvr_init() || die "Problem with dvr_init";
+
+if (! defined $config{"dvr.margin.start"}) {
+	logging("NOTICE", "DVR: no default MarginStart provided, take default (10 min)");
+	$config{"dvr.margin.start"} = 10; # minutes
 };
 
-if (defined $ReadFileBase) {
-	$ReadScheduleXML          = $ReadFileBase  . "-Schedule.xml";
-	$ReadStationsXML          = $ReadFileBase  . "-Stations.xml";
+if (! defined $config{"dvr.margin.stop"}) {
+	logging("NOTICE", "DVR: no default MarginStop provided, take default (35 min)");
+	$config{"dvr.margin.stop"} = 35; # minutes
 };
-
-my @xml_list;
-my $xml_raw;
-my $data;
-my $xml;
-
-### read margins from VDR setup.conf
-## Missing VDR feature: read such values via SVDRP
-logging("DEBUG", "Try to read margins from VDR setup.conf file: " . $setupfile);
-if(open(FILE, "<$setupfile")) {
-	while(<FILE>) {
-		chomp $_;
-		next if ($_ !~ /^Margin(Start|Stop)\s*=\s*([0-9]+)$/o);
-		if ($1 eq "Start") {
-			$MarginStart = $2 * 60;
-			logging("DEBUG", "VDR setup.conf provide MarginStart: " . $MarginStart);
-		} elsif ($1 eq "Stop") {
-			$MarginStop = $2 * 60;
-			logging("DEBUG", "VDR setup.conf provide MarginStop : " . $MarginStop);
-		};
-	};
-	close(FILE);
-};
-
-if (! defined $MarginStart) {
-	logging("NOTICE", "can't retrieve MarginStart from VDR setup.conf file, take default");
-	$MarginStart = 10 * 60;
-};
-if (! defined $MarginStop) {
-	logging("ERROR", "can't retrieve MarginStop from VDR setup.conf file, take default");
-	$MarginStop = 10 * 60;
-};
-
-
-
-### cleanup log files
-our $cleanupoldfiles;
-
-if ($cleanupoldfiles) {
-	logging("DEBUG", "Cleanup old files");
-	cleanup();
-}
 
 
 #############################################################
-## VDR: retrieve channels via SVDRP
+#############################################################
+## Channel management
+#############################################################
 #############################################################
 
-logging("DEBUG", "VDR: try to read channels via SVDRP from host (simulation=$sim): $Dest:$Port");
+#############################################################
+## Define channel related variables
+#############################################################
+my @channels_dvr;
+my @channels_dvr_filtered;
 
-$SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
-my @channels = getchan();
-if (scalar(@channels) == 0) {
-        logging("ERROR", "VDR: no channels received via SVDRP");
-	exit 1;
-} else {
-        logging("DEBUG", "VDR: amount of channels received via SVDRP: " . scalar(@channels));
+my @channels_service;
+my @channels_service_filtered;
+
+
+######################################################
+## Define some shortcut functions
+######################################################
+sub get_dvr_channel_name_by_cid($) {
+	return get_channel_name_by_cid(\@channels_dvr, $_[0]);
 };
 
-$SVDRP->close;
+sub get_service_channel_name_by_cid($) {
+	return get_channel_name_by_cid(\@channels_service, $_[0]);
+};
 
 
 #######################################
-## XML 'Sender' handling (stations)
+## Retrieve channnels from service
 #######################################
+$result = service_get_channels(\@channels_service);
 
-undef @xml_list;
-undef $xml_raw;
-
-if (defined $ReadStationsXML) {
-	if (! -e $ReadStationsXML) {
-		logging("ERROR", "XML file for 'Sender' is missing (forget -W before?): " . $ReadStationsXML);
-		exit(1);
-	};
-	# load 'Sender' (stations) from file
-	logging("INFO", "Read XML contents 'Sender' from file: " . $ReadStationsXML);
-	if(!open(FILE, "<$ReadStationsXML")) {
-		logging("ERROR", "can't read XML contents 'Sender' from file: " . $ReadStationsXML);
-		exit(1);
-	};
-	binmode(FILE);
-	while(<FILE>) {
-		$xml_raw .= $_;
-	};
-	close(FILE);
-	logging("INFO", "XML contents 'Sender' read from file (skip fetch from Internet): " . $ReadStationsXML);
-} else {
-	# Fetch 'Sender' via XML interface
-	logging ("INFO", "Fetch 'Sender' via XML interface");
-
-	my $request = request_replace_tokens("http://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
-
-	logging("DEBUG", "start request: " . $request);
-
-	my $response = $useragent->request(GET "$request");
-	if (! $response->is_success) {
-		logging("ERROR", "Can't fetch 'XML Merkzettel'  from tvinfo: " . $response->status_line);
-		exit 1;
-	};
-
-	$xml_raw = $response->content;
-
-	if (defined $WriteStationsXML) {
-		logging("NOTICE", "write XML contents 'Sender' to file: " . $WriteStationsXML);
-		open(FILE, ">$WriteStationsXML") || die;
-		print FILE $xml_raw;
-		close(FILE);
-		logging("NOTICE", "XML contents 'Sender' to file written: " . $WriteStationsXML);
-		# note: continue to write also HTML file later
-	};
-};
-
-if ($opt_X) {
-	print "#### XML NATIVE RESPONSE BEGIN ####\n";
-	print $xml_raw;
-	print "#### XML NATIVE RESPONSE END   ####\n";
-};
-
-if ($xml_raw =~ /encoding="UTF-8"/) {
-	$xml_raw = encode("utf-8", $xml_raw);
-};
-
-# Parse XML content
-$xml = new XML::Simple;
-
-$data = $xml->XMLin($xml_raw);
-
-if ($opt_X) {
-	print "#### XML PARSED RESPONSE BEGIN ####\n";
-	print Dumper($data);
-	print "#### XML PARSED RESPONSE END   ####\n";
-};
-
-# Version currently missing
-#if ($$data{'version'} ne "1.0") {
-#	logging ("ALERT", "XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
-#	exit 1;
-#};
-
-if ($xml_raw !~ /stations/) {
-	logging ("ERROR", "XML 'Sender' empty or username/passwort not proper, can't proceed");
-	exit 1;
-} else {
-	my $xml_list_p = @$data{'station'};
-
-	logging ("INFO", "XML 'Sender' has entries: " . scalar(keys %$xml_list_p));
-};
-
-my $xml_root_p = @$data{'station'};
-
-foreach my $name (sort keys %$xml_root_p) {
-	my $id = $$xml_root_p{$name}->{'id'};
-
-	my $altnames_p = $$xml_root_p{$name}->{'altnames'}->{'altname'};
-
-	my $altnames;
-
-	if (ref($altnames_p) eq "ARRAY") {
-		$altnames = join("|", @$altnames_p);
-	} else {
-		$altnames = $altnames_p;
-	};
-
-	$tvinfo_AlleSender_id_list{$id}->{'name'} = $name;
-	$tvinfo_AlleSender_id_list{$id}->{'altnames'} = $altnames;
-
-	my $selected = 0;
-	if (defined $$xml_root_p{$name}->{'selected'} && $$xml_root_p{$name}->{'selected'} eq "selected") {
-		$selected = 1;
-		$tvinfo_MeineSender_id_list{$id}->{'name'} = $name;
-		$tvinfo_MeineSender_id_list{$id}->{'altnames'} = $altnames;
-	};
-
-	logging("DEBUG", "XML Sender: " . sprintf("%4d: %s (%s) %d", $id, $name, $altnames, $selected));
-
-	$tvinfo_channel_name_by_id{$id} = $name;
-	$tvinfo_channel_id_by_name{$name} = $id;
-};
-
-
-if (scalar(keys %tvinfo_channel_id_by_name) == 0) {
-	logging("ALERT", "No entry found for 'Alle Sender' - please check for latest version and contact asap script development");
+if (scalar(@channels_service) == 0) {
+	logging("CRIT", "SERVICE amount of channels is ZERO - STOP");
 	exit 1;
 };
 
-if (scalar(keys %tvinfo_MeineSender_id_list) == 0) {
-	logging("ALERT", "No entry found for 'Meine Sender' - please check for latest version and contact asap script development");
-	exit 1;
-};
+#logging("DEBUG", "SERVICE channels before filtering/expanding (amount: " . scalar(@channels_service) . "):");
+#print_service_channels(\@channels_service);
 
-# print 'Meine Sender'
-my $c = -1;
-foreach my $id (keys %tvinfo_MeineSender_id_list) {
-	$c++;
-
-	my $name = "MISSING";
-	if (defined $tvinfo_channel_name_by_id{$id}) {
-		$name = $tvinfo_channel_name_by_id{$id};
-	};
-	logging("DEBUG", "XML MeineSender List: " . sprintf("%4d: %4d %s", $c, $id, $name));
-};
-
-
-###############################
-## Channel Check 'Meine Sender'
-###############################
-
-my %flags_channelmap;
-my $rc;
-
-# call external (universal) function channel check for channel mapping
-%flags_channelmap = (
-	'skip_ca_channels'     => $skip_ca_channels,
-	'force_hd_channels'    => 1,
-	'source_precedence'    => "CST",
-	'quiet'                => 0,
-	'whitelist_ca_groups'  => $whitelist_ca_groups,
+my %service_channel_filter = (
+	'skip_not_enabled' => 1
 );
 
-$rc = channelmap("tvinfo", \@channels, \%tvinfo_MeineSender_id_list, \%flags_channelmap);
+filter_service_channels(\@channels_service, \@channels_service_filtered, \%service_channel_filter);
 
-logging("INFO", "MeineSender: VDR Channel mapping result (TVinfo-Name -> VDR-ID VDR-Name") if (defined $opt_c);
+logging("INFO", "SERVICE channels after filtering/expanding (amount: " . scalar(@channels_service_filtered) . "):");
+print_service_channels(\@channels_service_filtered);
 
-foreach my $id (sort { lc($tvinfo_MeineSender_id_list{$a}->{'name'}) cmp lc($tvinfo_MeineSender_id_list{$b}->{'name'}) } keys %tvinfo_MeineSender_id_list) {
-	my $vdr_id   = $tvinfo_MeineSender_id_list{$id}->{'vdr_id'};
-	my $name     = $tvinfo_MeineSender_id_list{$id}->{'name'};
 
-	if (! defined $vdr_id || $vdr_id == 0) {
-		logging("WARN", "MeineSender: no VDR Channel found: " . sprintf("%-20s", $name));
-		next;
-	};
+#############################################################
+## Retrieve channels from DVR
+#############################################################
+$result = dvr_get_channels(\@channels_dvr);
 
-	my ($vdr_name, $vdr_bouquet) = split /;/, encode("iso-8859-1", decode("utf8", ${$channels[$vdr_id - 1]}{'name'}));
-	$vdr_name =~ s/,.*$//o; # remove additional name
-
-	my $loglevel = "DEBUG";
-	$loglevel = "INFO" if (defined $opt_c);
-
-	logging($loglevel, "MeineSender: VDR Channel mapping : " . sprintf("%-20s => %4d  %-20s", $name, $vdr_id, $vdr_name));
+if (scalar(@channels_dvr) == 0) {
+	logging("CRIT", "DVR amount of channels is ZERO - STOP");
+	exit 1;
 };
 
-my $MeineSender_count = scalar(keys %tvinfo_MeineSender_id_list);
-logging("INFO", "MeineSender amount (summary): " . $MeineSender_count);
+expand_dvr_channels(\@channels_dvr);
+
+my %dvr_channel_filter = (
+	'skip_ca_channels'     => $skip_ca_channels,
+	'whitelist_ca_groups'  => $whitelist_ca_groups
+);
+
+filter_dvr_channels(\@channels_dvr, \@channels_dvr_filtered, \%dvr_channel_filter);
+
+logging("INFO", "DVR channels after filtering/expanding (amount: " . scalar(@channels_dvr_filtered) . "):");
+print_dvr_channels(\@channels_dvr_filtered);
 
 
-##############################
-## Channel Check 'Alle Sender'
-##############################
+###################################################
+## Map service(filtered) and dvr(filtered) channels
+# display warnings if service has more channels
+#  than dvr
+###################################################
+
+my %service_cid_to_dvr_cid_map;
+
+my %flags_channelmap;
 
 # call external (universal) function channel check for channel mapping
 %flags_channelmap = (
-	'skip_ca_channels'     => $skip_ca_channels,
+	'force_hd_channels'    => 1,
+	'source_precedence'    => "CST",
+	'quiet'                => 1,
+);
+
+my $rc = channelmap(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, \@channels_service_filtered, \%flags_channelmap);
+
+print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, $opt_c);
+
+
+######################################################
+## Map service(unfiltered and dvr(filtered) channels
+# display suggestions
+######################################################
+my %service_cid_to_dvr_cid_map_unfiltered;
+%flags_channelmap = (
 	'force_hd_channels'    => 0,
 	'source_precedence'    => "CST",
 	'quiet'                => 1,
-	'whitelist_ca_groups'  => $whitelist_ca_groups,
 );
 
-$rc = channelmap("tvinfo", \@channels, \%tvinfo_AlleSender_id_list, \%flags_channelmap);
+if (defined $opt_show_channelmap_suggestions) {
+	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered, \@channels_service, \%flags_channelmap);
 
-logging("INFO", "AlleSender: VDR Channel mapping result (TVinfo-Name TVinfo-ID Match-Flag(*) VDR-Name VDR-Bouquet") if (defined $opt_c);
+	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered);
 
-my $AlleSender_count = 0;
-my $AlleSender_count_nomatch = 0;
-foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvinfo_AlleSender_id_list{$b}->{'name'}) } keys %tvinfo_AlleSender_id_list) {
-	my $vdr_id   = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
+	my $hint = 0;
 
-	if (! defined $vdr_id || $vdr_id == 0) {
-		$AlleSender_count_nomatch++;
-		next;
+	# search for missing mapping (means DVR has channel, but SERVICE has not enabled)
+	foreach my $s_cid (keys %service_cid_to_dvr_cid_map_unfiltered) {
+		if (defined $service_cid_to_dvr_cid_map{$s_cid}->{'cid'}) {
+			# found in filtered/filtered map
+			next;
+		};
+
+		if (! defined $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'cid'}) {
+			# not found in unfiltered/filtered map
+			next;
+		};
+
+		$hint = 1;
+		logging("NOTICE", "SERVICE: candidate to enable channel: " . $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'name'} . "  =>  " . get_dvr_channel_name_by_cid($service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'cid'}));
 	};
 
-	$AlleSender_count++;
-
-	my $name     = $tvinfo_AlleSender_id_list{$id}->{'name'};
-	my ($vdr_name, $vdr_bouquet) = split /;/, encode("iso-8859-1", decode("utf8", ${$channels[$vdr_id - 1]}{'name'}));
-	$vdr_bouquet = "" if (! defined $vdr_bouquet);
-
-	my $checked = ""; my $ca = "";
-	$checked = "*" if (defined $tvinfo_MeineSender_id_list{$id}->{'vdr_id'});
-
-	$ca = "CA" if (${$channels[$vdr_id - 1]}{'ca'} ne "0");
-
-	my $loglevel = "DEBUG";
-	$loglevel = "INFO" if (defined $opt_c);
-
-	logging($loglevel, "AlleSender: VDR Channel mapping: " . sprintf("%-20s %4d %1s %2s %-30s %-15s", $name, $vdr_id, $checked, $ca, $vdr_name, $vdr_bouquet));
-};
-
-foreach my $id (sort { lc($tvinfo_AlleSender_id_list{$a}->{'name'}) cmp lc($tvinfo_AlleSender_id_list{$b}->{'name'}) } keys %tvinfo_AlleSender_id_list) {
-	my $vdr_id   = $tvinfo_AlleSender_id_list{$id}->{'vdr_id'};
-
-	if (defined $vdr_id) {
-		next;
+	if ($hint == 0) {
+		logging("NOTICE", "SERVICE: no channel candidates found to enable channel - looks like all possible channels are configured");
 	};
 
-	my $name     = $tvinfo_AlleSender_id_list{$id}->{'name'};
-
-	logging("DEBUG", "AlleSender: VDR Channel mapping missing: " . sprintf("%-20s", $name));
+	exit 0;
 };
-logging("INFO", "AlleSender amount (cross-check summary): " . $AlleSender_count . " (delta=" . ($AlleSender_count - $MeineSender_count) . " [should be 0] nomatch=" . $AlleSender_count_nomatch ." [station not existing in VDR])");
+
+
+######################################################
+## Map service(unfiltered and dvr(unfiltered) channels
+######################################################
+
+if (defined $opt_u) {
+	my %service_cid_to_dvr_cid_map_unfiltered2;
+	%flags_channelmap = (
+		'force_hd_channels'    => 0,
+		'source_precedence'    => "CST",
+		'quiet'                => 1,
+	);
+
+	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered2, \@channels_dvr, \@channels_service, \%flags_channelmap);
+
+	logging("INFO", "SERVICE(unfiltered) => DVR(unfiltered) mapping result");
+	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered2, \@channels_dvr);
+
+	exit 0;
+};
 
 if (defined $opt_c) {
-	logging("NOTICE", "End of Channel Map results (stop here on request)");
 	exit 0;
 };
 
 
+#############################################################
+#############################################################
+## Timer management
+#############################################################
+#############################################################
+
 #######################################
-## XML 'Merkzettel' handling (schedule)
+## Get timers from service
 #######################################
+my @timers_service;
 
-undef @xml_list;
-undef $xml_raw;
-
-if (defined $ReadScheduleXML) {
-	if (! -e $ReadScheduleXML) {
-		logging("ERROR", "XML file for 'Merkzettel' is missing (forget -W before?): " . $ReadScheduleXML);
-		exit(1);
-	};
-	# load 'Merkliste' from file
-	logging("INFO", "Read XML contents 'Merkliste' from file: " . $ReadScheduleXML);
-	if(!open(FILE, "<$ReadScheduleXML")) {
-		logging("ERROR", "can't read XML contents 'Merkliste' from file: " . $ReadScheduleXML);
-		exit(1);
-	};
-	binmode(FILE);
-	while(<FILE>) {
-		$xml_raw .= $_;
-	};
-	close(FILE);
-	logging("INFO", "XML contents 'Merkzettel' read from file (skip fetch from Internet): " . $ReadScheduleXML);
-} else {
-	# Fetch 'Merkliste' via XML interface
-	logging ("INFO", "Fetch 'Merkzettel' via XML interface");
-
-	my $request = request_replace_tokens("http://www.tvinfo.de/share/openepg/schedule.php?username=<USERNAME>&password=<PASSWORDHASH>");
-
-	logging("DEBUG", "start request: " . $request);
-
-	my $response = $useragent->request(GET "$request");
-	if (! $response->is_success) {
-		logging("ERROR", "Can't fetch 'XML Merkzettel'  from tvinfo: " . $response->status_line);
-		exit 1;
-	};
-
-	$xml_raw = $response->content;
-
-	if (defined $WriteScheduleXML) {
-		logging("NOTICE", "write XML contents 'Merkliste' to file: " . $WriteScheduleXML);
-		open(FILE, ">$WriteScheduleXML") || die;
-		print FILE $xml_raw;
-		close(FILE);
-		logging("NOTICE", "XML contents 'Merkliste' to file written: " . $WriteScheduleXML);
-		# note: continue to write also HTML file later
-	};
-};
+$rc = service_get_timers(\@timers_service);
 
 
-if ($opt_X) {
-	print "#### XML NATIVE RESPONSE BEGIN ####\n";
-	print $xml_raw;
-	print "#### XML NATIVE RESPONSE END   ####\n";
-};
+#######################################
+## Get timers from DVR
+#######################################
+my @timers_dvr;
 
-# Replace encoding from -15 to -1, otherwise XML parser stops
-$xml_raw =~ s/(encoding="ISO-8859)-15(")/$1-1$2/;
+$rc = dvr_get_timers(\@timers_dvr);
 
-# Parse XML content
-$xml = new XML::Simple;
-$data = $xml->XMLin($xml_raw);
-
-if ($opt_X) {
-	print "#### XML PARSED RESPONSE BEGIN ####\n";
-	print Dumper($data);
-	print "#### XML PARSED RESPONSE END   ####\n";
-};
-
-if ($$data{'version'} ne "1.0") {
-	logging ("ALERT", "XML 'Merkliste' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
-	exit 1;
-};
-
-if ($xml_raw !~ /epg_schedule_entry/) {
-	logging ("ERROR", "XML 'Merkliste' empty or username/passwort not proper, can't proceed");
-	exit 1;
-} else {
-	my $xml_list_p = @$data{'epg_schedule_entry'};
-
-	if (ref($xml_list_p) eq "HASH") {
-		logging ("INFO", "XML 'Merkliste' has only 1 entry");
-		push @xml_list, $xml_list_p;
-	} else {
-		logging ("INFO", "XML 'Merkliste' has entries: " . scalar(@$xml_list_p));
-
-		# copy entries
-		foreach my $xml_entry_p (@$xml_list_p) {
-			push @xml_list, $xml_entry_p;
-		};
-	};
-};
+# convert channels if necessary
+$rc = dvr_convert_timers_channels(\@timers_dvr, \@channels_dvr);
 
 
-####################################
-## XML 'Merkzettel' analysis
-####################################
-
-logging("DEBUG", "Start XML 'Merkzettel' analysis");
-
-# Run through entries of XML contents of 'Merkliste'
-
-my %xml_valid_map;
-my $xml_entry = -1;
-
-foreach my $xml_entry_p (@xml_list) {
-	$xml_entry++;
-
-	if ($opt_X) {
-		print "####XML PARSED ENTRY BEGIN####\n";
-		print Dumper($xml_entry_p);
-		print "####XML PARSED ENTRY END####\n";
-	};
-	# logging ("DEBUG", "entry uid: " . $$entry_p{'uid'});
-
-	my $xml_starttime = $$xml_entry_p{'starttime'};
-	my $xml_endtime   = $$xml_entry_p{'endtime'};
-	my $xml_title     = $$xml_entry_p{'title'};
-	my $xml_channel   = $$xml_entry_p{'channel'};
-
-	my $xml_startime_epoch = UnixDate(ParseDate($xml_starttime), "%s");
-	my $xml_endtime_epoch  = UnixDate(ParseDate($xml_endtime  ), "%s");
-
-	$xml_starttime =~ /^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([012][0-9]:[0-5][0-9]):[0-5][0-9] /;
-	my $xml_starttime_year    = $1;
-	my $xml_starttime_month   = $2;
-	my $xml_starttime_day     = $3;
-	my $xml_starttime_hourmin = $4;
-
-	$xml_endtime =~ /^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([012][0-9]:[0-5][0-9]):[0-5][0-9] /;
-	my $xml_endtime_hourmin = $4;
-
-	if ($xml_startime_epoch < time) {
-		logging("DEBUG", "XML: start is in the past (SKIP): xml_starttime=$xml_starttime channel=$xml_channel xml_title='$xml_title'");
-		$xml_valid_map{$xml_entry} = -1;
-		next;
-	};
-
-	if ($$xml_entry_p{'eventtype'} ne "rec") {
-		logging("DEBUG", "XML SKIP (eventtype!=rec): start=$xml_starttime (day=$xml_starttime_day month=$xml_starttime_month hourmin=$xml_starttime_hourmin)  end=$xml_endtime (hourmin=$xml_endtime_hourmin)  channel=$xml_channel title='$xml_title'");
-		$xml_valid_map{$xml_entry} = -2;
-		next;
-	};
-
-	logging("TRACE", "XML: start=$xml_starttime (day=$xml_starttime_day month=$xml_starttime_month hourmin=$xml_starttime_hourmin) end=$xml_endtime (hourmin=$xml_endtime_hourmin) channel=$xml_channel title='$xml_title'");
-
-	$xml_valid_map{$xml_entry} = 1;
-};
-
-
-if (defined $opt_W) {
-	logging("NOTICE", "Stop here because option used: -W");
+#######################################
+## Pre start processing
+#######################################
+if ((defined $opt_write_service_to_file) || (defined $opt_write_dvr_to_file)) {
+	logging("NOTICE", "Stop here because debug options for writing response files selected");
 	exit 0;
 };
 
 
-#######################################################
-### Create timer list of Merkliste based on XML entries
-#######################################################
+##################################################################################
+### Check existing DVR timer list and check against list retrieved from SERVICE
+##################################################################################
 
-my @newtimers;
+my @s_timers_num = ();
+my %s_timers_entries = (); # hash with SERVICE timer pointers (key: number)
 
-$xml_entry = -1;
-foreach my $xml_entry_p (@xml_list) {
-	$xml_entry++;
-
-	if ($xml_valid_map{$xml_entry} != 1) {
-		next;
-	};
-
-	logging("DEBUG", "XML: Analyse timer from XML entry #$xml_entry: start=$$xml_entry_p{'starttime'}  end=$$xml_entry_p{'endtime'}  channel=$$xml_entry_p{'channel'} title='$$xml_entry_p{'title'}'");
-
-	my $xml_startime_epoch = UnixDate(ParseDate($$xml_entry_p{'starttime'}), "%s");
-	my $xml_endtime_epoch  = UnixDate(ParseDate($$xml_entry_p{'endtime'}), "%s");
-
-	# Apply margins	
-	my $timer_starttime_epoch = $xml_startime_epoch - $MarginStart;
-	my $timer_endtime_epoch   = $xml_endtime_epoch + $MarginStop;
-
-	# Check for timer in the past
-	if ($timer_starttime_epoch < time()) {
-		# starttime already in the past
-		if ($timer_endtime_epoch <time()) {
-			logging("DEBUG", "XML: Start/end in the past (SKIP) entry #$xml_entry: start=$$xml_entry_p{'starttime'}  end=$$xml_entry_p{'endtime'}  channel=$$xml_entry_p{'channel'} title='$$xml_entry_p{'title'}'");
-
-		} else {
-			logging("DEBUG", "XML: Start in the past (SKIP) entry #$xml_entry: start=$$xml_entry_p{'starttime'}  end=$$xml_entry_p{'endtime'}  channel=$$xml_entry_p{'channel'} title='$$xml_entry_p{'title'}'");
-		};
-		next;
-	};
-
-	# Convert start/end to VDR notation
-	my $timer_starttime = &ParseDateString("epoch $timer_starttime_epoch");
-	my $timer_starttime_ymd = UnixDate($timer_starttime, "%Y-%m-%d");
-	my $timer_starttime_hourmin = UnixDate($timer_starttime, "%H%M");
-
-	my $timer_endtime = &ParseDateString("epoch $timer_endtime_epoch");
-	my $timer_endtime_hourmin = UnixDate($timer_endtime, "%H%M");
-
-	## Convert channel name to id
-	my $channel_name = $$xml_entry_p{'channel'};
-
-	my $channel_id = undef;
-
-	if (defined $tvinfo_channel_id_by_name{$channel_name}) {
-		my $id = $tvinfo_channel_id_by_name{$channel_name};
-		if (defined $tvinfo_MeineSender_id_list{$id}->{'vdr_id'}) {
-			$channel_id = $tvinfo_MeineSender_id_list{$id}->{'vdr_id'};
-			logging("DEBUG", "XML: successful convert sender to channel using list retrieved via SVDRP and automatic channel map: $channel_name (" . ${$channels[$channel_id - 1]}{'name'} . ")");
-		};
-	};
-
-	if (! defined $channel_id) {
-		logging("ERROR", "XML: Can't convert sender to channel using list retrieved via SVDRP: $channel_name");
-		next;
-	};
-
-	logging("DEBUG", "XML: Candidate timer from XML 'Merkliste' entry #$xml_entry: start=$timer_starttime_ymd $timer_starttime_hourmin ($$xml_entry_p{'starttime'})  end=$timer_endtime_hourmin ($$xml_entry_p{'endtime'})  channel=$$xml_entry_p{'channel'} channel_id=$channel_id title='$$xml_entry_p{'title'}'");
-	
-	# Create entry
-	my $title    = $$xml_entry_p{'title'};
-	$title =~ s/\r\n.*$//mgo; # skip everything after a potential new line
-
-	my $subtitle = "";
-	my $summary  = "";
-	my $genre    = $$xml_entry_p{'nature'};
-
-	my $tvinfo_folder = ".";
-	$tvinfo_folder = $folder if (defined $folder && $folder ne "");
-
-	push(@newtimers, {
-		channel_id    => $channel_id,
-		timer_day     => $timer_starttime_ymd,
-		anfang        => $timer_starttime_hourmin,
-		ende          => $timer_endtime_hourmin,
-		genre         => $genre,
-		title         => $title,
-		summary       => $summary,
-		subtitle      => $subtitle,
-		tvinfo_user   => $username,
-		tvinfo_folder => $tvinfo_folder
-	});
-};
-
-
-#################################################################################
-### Retrieve existing VDR timer list and check against list retrieved from tvinfo
-#################################################################################
 # timer num = 0 means skip
-my @oldtimers_num     = (); # list of numbers of existing timer numbers matching tvinfo token
-my %oldtimers_entries = (); # hash with timer pointers (key: number)
-my %oldtimers_action  = (); # hash with timer actions
-my @oldtimers_delete  = (); # list of number of existing timers which needs to be deleted
+my @d_timers_num     = (); # list of numbers of existing timer numbers matching SERVICE token
+my %d_timers_entries = (); # hash with DVR timer pointers (key: number)
 
-$SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
-logging("DEBUG", "Reading timers via SVDRP with flag '$tvinfoprefix' (simulation=$sim)");
-@oldtimers_num = gettimers($tvinfoprefix, \%timers_cache);
+my %d_timers_action  = (); # hash with DVR timer actions
+my @d_timers_new     = (); # hash with timer_hp to add
+my %s_timers_action  = (); # hash with SERVICE timer actions
 
-if (scalar(@oldtimers_num) > 0) {
-	logging("DEBUG", "VDR: following timers found matching tvinfo token (amount: " . scalar(@oldtimers_num) . ") : @oldtimers_num");
-};
+## Create existing DVR timer list
+for (my $a = 0; $a < scalar(@timers_dvr); $a++) {
+	my $entry_hp = $timers_dvr[$a];
 
-foreach my $oldtimer_num (@oldtimers_num) {
-	my $timer_p = $timers_cache{$oldtimer_num};
-
-	if ($$timer_p{'summary'} =~ /\(tvinfo-user=([^)]*)\)/o) {
-		$$timer_p{'tvinfo_user'} = $1;
+	# debugging/blacklist
+	if (defined $opt_K) {
+		if (grep /^$$entry_hp{'tid'}$/, split(",", $opt_K)) {
+			logging("NOTICE", "SERVICE/DVR: skip DVR timer (blacklisted by option -K): " . $$entry_hp{'tid'});
+			next;
+		};
 	};
 
-	if ($$timer_p{'summary'} =~ /\(tvinfo-folder=([^)]*)\)/o) {
-		$$timer_p{'tvinfo_folder'} = $1;
-	};
-
-	# recode title
-	$$timer_p{'title'} = encode("iso-8859-1", decode("utf8", $$timer_p{'title'}));
-
-	logging("DEBUG", "VDR: existing timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'");
-	$oldtimers_entries{$oldtimer_num} = $timer_p;
-	$oldtimers_action{$oldtimer_num} = "unknown";
+	push @d_timers_num, $$entry_hp{'tid'};
+	$d_timers_entries{$$entry_hp{'tid'}} = $timers_dvr[$a];
 };
 
-# check timers from tvinfo against existing VDR timers
-my $flag_found = 0;
-my $timerevent_entry = -1;
-foreach my $timerevent (@newtimers) {
-	$timerevent_entry++;
+if (scalar(@d_timers_num) > 0) {
+	logging("DEBUG", "SERVICE/DVR: following DVR timers found matching SERVICE token (amount: " . scalar(@d_timers_num) . "): " . join(" ", @d_timers_num));
+};
 
-	my $timerevent_text = "channel_id=" . $$timerevent{'channel_id'} . " timer_day=" . $$timerevent{'timer_day'} . " start=" . $$timerevent{'anfang'} . " end=" . $$timerevent{'ende'} . " title='" . $$timerevent{'title'} . "'" . " tvinfo-user=" . $$timerevent{'tvinfo_user'} . " tvinfo-folder=" . $$timerevent{'tvinfo_folder'};
 
-	logging("DEBUG", "Possible new timer #" . sprintf("%3d     ", $timerevent_entry) . ": " . $timerevent_text);
+## create SERVICE timer list to check/add
+for (my $a = 0; $a < scalar(@timers_service); $a++) {
+	my $entry_hp = $timers_service[$a];
 
-	$flag_found = 0;
-	my $oldtimer_change = -1;
-	foreach my $oldtimer_num (@oldtimers_num) {
-		next if ($oldtimers_action{$oldtimer_num} eq "match");
+	# debugging/blacklist
+	if (defined $opt_E) {
+		if (grep /^$$entry_hp{'tid'}$/, split(",", $opt_E)) {
+			logging("NOTICE", "SERVICE/DVR: skip SERVICE timer (blacklisted by option -E): " . $$entry_hp{'tid'});
+			next;
+		};
+	};
 
-		my $timer_p = $oldtimers_entries{$oldtimer_num};
+	push @s_timers_num, $$entry_hp{'tid'};
+	$s_timers_entries{$$entry_hp{'tid'}} = $timers_service[$a];
+};
 
-		# extract existing usernames and folders
-		my @tvinfo_user_entries = split /,/, $$timer_p{'tvinfo_user'};
-		my @tvinfo_folder_entries = split /,/, $$timer_p{'tvinfo_folder'};
-		my %tvinfo_user_folder_entries;
+if (scalar(@s_timers_num) > 0) {
+	logging("DEBUG", "SERVICE/DVR: following SERVICE timers need to check/add (amount: " . scalar(@s_timers_num) . "): " . join(" ", @s_timers_num));
+};
 
-		# check for totally empty folder entries and store default (migration issue)
-		my $c = -1;
-		for my $user (@tvinfo_user_entries) {
-			$c++;
-			if ((defined $tvinfo_folder_entries[$c]) && ($tvinfo_folder_entries[$c] ne "")) {
-				if (($user eq $username) && ($tvinfo_folder_entries[$c] ne $$timerevent{'tvinfo_folder'})) {
-					# overwrite old folder
-					$tvinfo_folder_entries[$c] = $$timerevent{'tvinfo_folder'};
-				};
+#
+
+foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timers_entries{$b}->{'start_ut'}} @d_timers_num) {
+	my $d_timer_hp = $d_timers_entries{$d_timer_num};
+
+	logging("DEBUG", "SERVICE/DVR: existing DVR timer"
+		. " tid="    . sprintf("%-2d", $d_timer_num)
+		. " cid="    . sprintf("%-3d",$$d_timer_hp{'cid'})
+		. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
+		. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+		. " title='" . $$d_timer_hp{'title'} . "'"
+		. " cname='" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . "'"
+	);
+};
+
+## check timers from SERVICE against existing DVR timers
+my @s_timers_num_found;
+my @d_timers_num_found;
+
+foreach my $s_timer_num (@s_timers_num) {
+	my $s_timer_hp = $s_timers_entries{$s_timer_num};
+
+	if ($$s_timer_hp{'stop_ut'} < time()) {
+		$s_timers_action{$s_timer_num} = "skip/stop-in-past";
+		logging("DEBUG", "SERVICE/DVR: skip SERVICE timer - stop time in the past: tid=" . $$s_timer_hp{'tid'});
+		next;
+	} elsif ($$s_timer_hp{'start_ut'} < time()) {
+		$s_timers_action{$s_timer_num} = "skip/start-in-past";
+		logging("DEBUG", "SERVICE/DVR: skip SERVICE timer - start time in the past: tid=" . $$s_timer_hp{'tid'});
+		next;
+	};
+
+	logging("DEBUG", "SERVICE/DVR: possible new timer tid=" . $s_timer_num . ":"
+		. " s_cid="  . $$s_timer_hp{'cid'}
+		. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+		. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+		. " title='" . $$s_timer_hp{'title'} . "'"
+	);
+
+	foreach my $d_timer_num (@d_timers_num) {
+		next if (defined $d_timers_action{$d_timer_num} && $d_timers_action{$d_timer_num} eq "match");
+
+		my $d_timer_hp = $d_timers_entries{$d_timer_num};
+
+		logging("TRACE", "MATCH: Check against existing timer #$d_timer_num:"
+			. " d_cid="        . $$d_timer_hp{'cid'} 
+			. " start="        . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
+			. " stop="         . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " title='"       . $$d_timer_hp{'title'} . "'"
+			. " service_data=" . $$d_timer_hp{'service_data'}
+		);
+
+		if (	($$d_timer_hp{'start_ut'} == $$s_timer_hp{'start_ut'})
+		     &&	($$d_timer_hp{'stop_ut'}  == $$s_timer_hp{'stop_ut'})
+		     && ($service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'} == $$d_timer_hp{'cid'})
+			) {
+
+			push @s_timers_num_found, $s_timer_num;
+			push @d_timers_num_found, $d_timer_num;
+
+			if ($$s_timer_hp{'service_data'} eq $$d_timer_hp{'service_data'}) {
+				logging("DEBUG", "MATCH(channel/time/s_d) SERVICE"
+					. " tid=" . $$s_timer_hp{'tid'}
+					. " cid=" . $$s_timer_hp{'cid'}
+					. " s_d=" . $$s_timer_hp{'service_data'}
+					. " <=> DVR"
+					. " tid=" . $$d_timer_hp{'tid'}
+					. " cid=" . $$d_timer_hp{'cid'}
+					. " s_d=" . $$d_timer_hp{'service_data'}
+				);
+			} elsif (grep /^$$s_timer_hp{'service_data'}$/, split(",", $$d_timer_hp{'service_data'})) { 
+				logging("DEBUG", "MATCH(channel/time/s_d-included) SERVICE"
+					. " tid=" . $$s_timer_hp{'tid'}
+					. " cid=" . $$s_timer_hp{'cid'}
+					. " s_d=" . $$s_timer_hp{'service_data'}
+					. " <=> DVR"
+					. " tid=" . $$d_timer_hp{'tid'}
+					. " cid=" . $$d_timer_hp{'cid'}
+					. " s_d=" . $$d_timer_hp{'service_data'}
+				);
 			} else {
-				# fill with default
-				$tvinfo_folder_entries[$c] = $user;
-			};	
-		};
-
-		# convert folder array to hash
-		my $d = 0;
-		foreach my $user (@tvinfo_user_entries) {
-			$tvinfo_user_folder_entries{$user} = $tvinfo_folder_entries[$d];
-			$d++;
-		};
-
-		logging("TRACE", "MATCH: user        entries: " . join(" ", @tvinfo_user_entries));
-		logging("TRACE", "MATCH: user folder entries: " . join(" ", @tvinfo_folder_entries));
-
-		logging("TRACE", "MATCH: Check against existing timer    #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " start=" . $$timer_p{'anfang'} . " end=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "' tvinfo-user=" . join(",", @tvinfo_user_entries) . " tvinfo-folder=" . join(",", @tvinfo_folder_entries));
-
-		if (($$timerevent{'channel_id'} == $$timer_p{'channel_id'}) && ($$timerevent{'timer_day'} eq $$timer_p{'timer_day'}) && ($$timerevent{'anfang'} eq $$timer_p{'anfang'}) && ($$timerevent{'ende'} eq $$timer_p{'ende'})) {
-			logging("DEBUG", "MATCH: channel_id,timer_day,begin,end equal/check title of existing timer   #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " start=" . $$timer_p{'anfang'} . " end=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "' tvinfo-user=" . join(",", @tvinfo_user_entries) . " tvinfo-folder=" . join(",", @tvinfo_folder_entries) . " username=" . $username);
-
-			# adjust title
-			logging("TRACE", "MATCH: timerevent->tvinfo_folder=" . $$timerevent{'tvinfo_folder'} . "");
-			my $folder = createfoldername(split /,/, $$timerevent{'tvinfo_folder'});
-			my $title = $$timerevent{'title'};
-			if ($folder ne ".") {
-				# prepend folder
-				$title = $folder . "~" . $title;
+				logging("INFO", "MATCH(channel/time) NO-MATCH(su) SERVICE"
+					. " tid=" . $$s_timer_hp{'tid'}
+					. " cid=" . $$s_timer_hp{'cid'}
+					. " s_d=" . $$s_timer_hp{'service_data'}
+					. " <=> DVR"
+					. " tid=" . $$d_timer_hp{'tid'}
+					. " cid=" . $$d_timer_hp{'cid'}
+					. " s_d=" . $$d_timer_hp{'service_data'}
+					. " UPDATE_REQUIRED (add s_d/d_d)"
+				);
+				# extend service_data & dvr_data
+				$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = $$s_timer_hp{'service_data'} . "," . $$d_timer_hp{'service_data'};
+				$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = $config{'service.user'} . ":folder:" . $config{'dvr.folder'} . "," . $$d_timer_hp{'dvr_data'};;
 			};
+			last;
+		};
+	};
+};
 
-			# Check title match
-			my $match = 0;
+## check for timers provided by SERVICE not found in DVR
+# create helper hash
+my %channels_lookup_by_cid;
+foreach my $channel_hp (@channels_dvr) {
+	$channels_lookup_by_cid{$$channel_hp{'cid'}}->{'timerange'} = $$channel_hp{'timerange'};
+};
 
-			logging("TRACE", "MATCH: compare     title='" . $title . "'");
-			logging("TRACE", "MATCH: with title(timer)='" . $$timer_p{'title'} . "'");
+if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
+	foreach my $s_timer_num (@s_timers_num) {
+		next if (grep /^$s_timer_num$/, @s_timers_num_found); # skip if already in found list
 
-			if ($title eq $$timer_p{'title'}) {
-				# fully equal
-				$match = 1;
-			} elsif (($folder ne "") && ($$timerevent{'title'} eq $$timer_p{'title'})) {
-				# missing folder
-				$match = 11;
-			} else {
-				my $timer_p_title_length    = length($$timer_p{'title'});
-				my $timerevent_title_length = length($$timerevent{'title'});
+		if ((defined $s_timers_action{$s_timer_num}) && ($s_timers_action{$s_timer_num} =~ /^skip/o)) {
+			# skip if marked with skip
+		};
 
-				if (substr($$timerevent{'title'}, 0, $timer_p_title_length) eq $$timer_p{'title'}) {
-					# start from first char
-					$match = 2;
-				} elsif (substr($$timer_p{'title'}, 0, $timerevent_title_length) eq $$timerevent{'title'}) {
-					# start from first char
-					$match = 3;
-				} elsif (substr($title, 0, $timer_p_title_length) eq $$timer_p{'title'}) {
-					# start from first char (with folder)
-					$match = 4;
-				} else {
-					my $timer_title = $$timer_p{'title'};
-					if ($$timer_p{'title'} =~ /^.*~(.*)/) {
-						$timer_title = $1;
-						logging("TRACE", "MATCH: title(timer) contains folder (remove): '" . $$timer_p{'title'} . "'");
-					};
+		my $s_timer_hp = $s_timers_entries{$s_timer_num};
 
-					logging("TRACE", "MATCH: compare     title='" . $$timerevent{'title'} . "'");
-					logging("TRACE", "MATCH: with title(timer)='" . $timer_title . "'");
+		my $loglevel;
+		my $action_text;
 
-					if ((index($timer_title, $$timerevent{'title'}) > -1) || (index($$timerevent{'title'}, $timer_title) > -1)) {
-						logging("DEBUG", "MATCH: substring match title(vdr)='" . $timer_title . "' title(new)='" . $$timerevent{'title'} . "'");
-						my $user_folder_list = "";
-						for my $user (keys %tvinfo_user_folder_entries) {
-							$user_folder_list .= " " if ($user_folder_list ne "");
-							$user_folder_list = $user . "=" . $tvinfo_user_folder_entries{$user};
-						};
-						logging("TRACE", "MATCH: user folder entries: " . $user_folder_list);
-						logging("TRACE", "MATCH: tvinfo_user_folder_entry: " . $tvinfo_user_folder_entries{$username} . " username=" . $username) if (defined $tvinfo_user_folder_entries{$username});
+		if (defined $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'}) {
+			$loglevel = "INFO";
 
-						if (defined $tvinfo_user_folder_entries{$username}) {
-							# user already in the list
-							$match = 4;
+			# default
+			$action_text = "TODO-ADD";
+			$s_timers_action{$s_timer_num} = "add";
 
-							# Check folder entries
-							if ($tvinfo_user_folder_entries{$username} eq $folder) {
-								# existing, check generated folder name (below)
-								$match = 19;
-							} else {
-								$tvinfo_user_folder_entries{$username} = $folder;
-								# Timer must be changed
-								$match = 18;
-							};
+			my $timer_start = strftime("%H%M", localtime($$s_timer_hp{'start_ut'}));
+			my $timer_stop  = strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}));
+
+			my $d_timer_cid = $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'};
+
+			## check whether channel is only available in a timerange
+			if (defined $channels_lookup_by_cid{$d_timer_cid}->{'timerange'}) {
+				logging("DEBUG", "SERVICE/DVR: timer found with expanded channel:"
+					. " tid="   . $$s_timer_hp{'tid'}
+					. " cid="   . $$s_timer_hp{'cid'}
+					. " start=" . $timer_start
+					. " stop="  . $timer_stop
+				);
+
+				my $match = 0;
+				my ($channel_start, $channel_stop) = split("-", $channels_lookup_by_cid{$d_timer_cid}->{'timerange'}, 2);
+
+				if ($channel_stop > $channel_start) {
+					# e.g. 0600-2059
+					if (($timer_start >= $channel_start) && ($timer_start <= $channel_stop)) {
+						if ($timer_stop <= $channel_stop) {
+							$match = 1; #ok
 						} else {
-							# Timer must be changed
-							$match = 17;
+							$match = 2; # stop is out-of-range
 						};
-					} else {
-						logging("DEBUG", "MATCH: NO-MATCH");
 					};
-				};
-			};
-
-			logging("TRACE", "MATCH: result: " . $match);
-
-			if ($match > 10) {
-				logging("DEBUG", "MATCH: Timer already exists (poss update req) #" . sprintf("%-2d", $oldtimer_num). ": channel_id=" . sprintf("%-3d", $$timerevent{'channel_id'}) . " timer_day=" . $$timerevent{'timer_day'} . " start=" . $$timerevent{'anfang'} . " end=" . $$timerevent{'ende'} . " title='" . $$timerevent{'title'} . "' matchmethod=" . $match);
-
-				if ($match == 11) {
-					$oldtimers_action{$oldtimer_num} = "update";
-					$oldtimer_change = $oldtimer_num;
-
-					$flag_found = 2;
-					last;
-				};
-
-				if ($match == 17) {
-					# add new username/folder
-					push @tvinfo_user_entries, $username;
-					$tvinfo_user_folder_entries{$username} = $folder;
-				};
-
-				# recreate array from hash
-				@tvinfo_folder_entries = ();
-				foreach my $user (@tvinfo_user_entries) {
-					logging("TRACE", "MATCH: add user_folder for user: " . $user . " -> " . $tvinfo_user_folder_entries{$user});
-					push @tvinfo_folder_entries, $tvinfo_user_folder_entries{$user};
-				};
-
-				$$timerevent{'tvinfo_user'} = join(",", @tvinfo_user_entries);
-				$$timerevent{'tvinfo_folder'} = join(",", @tvinfo_folder_entries);
-
-				logging("TRACE", "MATCH: tvinfo_user(new)=" . $$timerevent{'tvinfo_user'} . " tvinfo_folder(new)=" . $$timerevent{'tvinfo_folder'});
-
-				# adjust title
-				my $folder_new = createfoldername(split /,/, $$timerevent{'tvinfo_folder'});
-				my $title = $$timerevent{'title'};
-				if ($folder_new ne ".") {
-					# prepend folder
-					$title = $folder_new . "~" . $title;
-				};
-
-				logging("TRACE", "MATCH: title(existing)='" . $$timer_p{'title'} . "' title(new)='" . $title . "'");
-
-				#if (($$timer_p{'title'} eq $title) && ($match != 18) && ($match != 19)) {
-				if ($match == 19) {
-					if ($$timer_p{'title'} eq $title) {
-						# nothing to do
-						logging("TRACE", "MATCH: identical title (existing)='" . $$timer_p{'title'} . "' title(new)='" . $title . "'");
-						$oldtimers_action{$oldtimer_num} = "match";
-						$newtimers[$timerevent_entry] = undef;
-						$flag_found = 1;
-						last;
-					} elsif (index($title, $$timer_p{'title'}) == 0) {
-						# nothing to do (length limit)
-						logging("TRACE", "MATCH: fully included title (existing)='" . $$timer_p{'title'} . "' title(new)='" . $title . "'");
-						$oldtimers_action{$oldtimer_num} = "match";
-						$newtimers[$timerevent_entry] = undef;
-						$flag_found = 1;
-						last;
+				} else {
+					# e.g. 2100-0559
+					if (($timer_start >= $channel_start) || ($timer_start <= $channel_stop)) {
+						if (($timer_stop >= $channel_start) || ($timer_stop <= $channel_stop)) {
+							$match = 1; #ok
+						} else {
+							$match = 2; # stop is out-of-range
+						};
 					};
 				};
 
-				$oldtimers_action{$oldtimer_num} = "update";
-				$oldtimer_change = $oldtimer_num;
+				# remove sub-channel number
+				my $d_timer_cid_main = $d_timer_cid;
+				$d_timer_cid_main =~  s/#.*$//o;
 
-				$flag_found = 2;
-				last;
-
-			} elsif ($match > 0) {
-				logging("DEBUG", "MATCH: Timer already exists (skip delete/add) #" . sprintf("%-2d", $oldtimer_num) . ": channel_id=" . sprintf("%-3d", $$timerevent{'channel_id'}) . " timer_day=" . $$timerevent{'timer_day'} . " start=" . $$timerevent{'anfang'} . " end=" . $$timerevent{'ende'} . " title='" . $$timerevent{'title'} . "' matchmethod=" . $match);
-				$oldtimers_action{$oldtimer_num} = "match";
-				$newtimers[$timerevent_entry] = undef;
-				$flag_found = 1;
-				last;
-			};
-		};
-	};
-
-	if ($flag_found == 0) {
-		logging("INFO",  "Timer needs to be added     : " . $timerevent_text);
-	} elsif ($flag_found == 1) {
-		logging("DEBUG", "Timer need no change        : " . $timerevent_text);
-	} elsif ($flag_found == 2) {
-		$timerevent_text = "channel_id=" . $$timerevent{'channel_id'} . " timer_day=" . $$timerevent{'timer_day'} . " start=" . $$timerevent{'anfang'} . " end=" . $$timerevent{'ende'} . " title='" . $$timerevent{'title'} . "'" . " tvinfo-user=" . $$timerevent{'tvinfo_user'} . " tvinfo-folder=" . $$timerevent{'tvinfo_folder'};
-		logging("INFO", "Timer needs to be changed #" . $oldtimer_change . ": " . $timerevent_text);
-	};
-};
-
-# copy still defined oldtimers to array of timers which must be deleted
-logging("DEBUG", "VDR: check existing timers against results (skip/update/delete)");
-foreach my $oldtimer_num (@oldtimers_num) {
-	if ($oldtimers_action{$oldtimer_num} ne "match") {
-		my $timer_p = $oldtimers_entries{$oldtimer_num};
-
-		if (($$timer_p{'tmstatus'} & 0x8) == 0x8) {
-			logging("DEBUG", "VDR: Skip recording timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'");
-			next;
-		};
-
-		my $summary_extract = "";
-		$summary_extract = " summary='..." . substr($$timer_p{'summary'}, length($$timer_p{'summary'}) - 37, 40) . "'" if $opt_T;
-
-		# update timer
-		if ($oldtimers_action{$oldtimer_num} eq "update") {
-			logging("NOTICE", "VDR: remove existing timer for update #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-			push @oldtimers_delete, $oldtimer_num; # delete -> add
-			next;
-		};
-
-		# tvinfo-user line (delete username because no longer defined)
-		if (grep { $_ eq $username } (split /,/, $$timer_p{'tvinfo_user'})) {
-			logging("DEBUG", "VDR: still matching username ($username) timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-
-			# remove username/folder
-			my $c = 0;
-			my @user_entries;
-			my @folder_entries;
-			my @tvinfo_folder_entries = split /,/, $$timer_p{'tvinfo_folder'};
-			foreach my $user (split /,/, $$timer_p{'tvinfo_user'}) {
-				if ($user ne $username) {
-					push @user_entries, $user;
-					push @folder_entries, $tvinfo_folder_entries[$c];
-					$c++;
+				if ($match == 1) {
+					logging("DEBUG", "selected channel of timer is included in timerange");
+				} elsif ($match == 2) {
+					logging("WARN", "stop time of timer out of expanded channel timerange");
+				} else {
+					logging("WARN", "start time of timer out of expanded channel timerange");
+					$loglevel = "WARN";
+					$s_timers_action{$s_timer_num} = "skip/out-of-channel-timerange";
+					$action_text = "SKIP - CHANNEL-MISSING-IN-DVR:NOT-IN-TIMERANGE:";
+					$action_text .= " " . get_service_channel_name_by_cid($$s_timer_hp{'cid'});
+					$action_text .= " <=> " . get_dvr_channel_name_by_cid($d_timer_cid_main);
+					$action_text .= " " . $channels_lookup_by_cid{$d_timer_cid}->{'timerange'};
 				};
 			};
-			$$timer_p{'tvinfo_user'}   = join ",", @user_entries;
-			$$timer_p{'tvinfo_folder'} = join ",", @folder_entries;
-
-			if ($$timer_p{'tvinfo_user'} eq "") {
-				logging("NOTICE", "VDR: remove timer having no longer a user: timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-				push @oldtimers_delete, $oldtimer_num; # delete
-				next;
-			};
-
-			logging("NOTICE", "VDR: update timer after removing users ($username): timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-			$oldtimers_action{$oldtimer_num} = "update";
-
-			# strip folder from title
-			my $folder = createfoldername(@tvinfo_folder_entries);
-			if ($$timer_p{'title'} =~ /^$folder~/) {
-				$$timer_p{'title'} =~ s/^$folder~//;
-			};
-
-			# strip tvinfo from summary
-			$$timer_p{'summary'} =~ s/\(tvinfo-user=([^)]*)\)//o;
-			$$timer_p{'summary'} =~ s/\(tvinfo-folder=([^)]*)\)//o;
-			my $prefix_escaped = $tvinfoprefix;
-			$prefix_escaped =~ s/([()])/\\$1/g;
-			$$timer_p{'summary'} =~ s/\|$prefix_escaped//o;
-
-			# create new timer by copy
-			push(@newtimers, {
-				channel_id    => $$timer_p{'channel_id'},
-				timer_day     => $$timer_p{'timer_day'},
-				anfang        => $$timer_p{'anfang'},
-				ende          => $$timer_p{'ende'},
-				title         => $$timer_p{'title'},
-				summary       => $$timer_p{'summary'},
-				tvinfo_user   => $$timer_p{'tvinfo_user'},
-				tvinfo_folder => $$timer_p{'tvinfo_folder'}
-			});
-			next;
-		};
-
-		if (! (grep { $_ eq $username } (split /,/, $$timer_p{'tvinfo_user'}))) {
-			logging("DEBUG", "VDR: skip not matching username ($username) timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-			next;
-		};
-
-		logging("NOTICE", "VDR: remove obsolete existing timer #$oldtimer_num: channel_id=" . $$timer_p{'channel_id'} . " timer_day=" . $$timer_p{'timer_day'} . " anfang=" . $$timer_p{'anfang'} . " ende=" . $$timer_p{'ende'} . " title='" . $$timer_p{'title'} . "'" . $summary_extract);
-
-		$oldtimers_action{$oldtimer_num} = "delete";
-		push @oldtimers_delete, $oldtimer_num;
-
-	} else {
-		logging("DEBUG", "VDR: existing timer stays untouched #$oldtimer_num");
-	};
-};
-
-# remove undef in newtimers
-my @newtimers_cleaned = ();
-$timerevent_entry = 0;
-foreach my $newtimer (@newtimers) {
-	$timerevent_entry++;
-	if (defined $newtimer) {
-		push @newtimers_cleaned, $newtimer;
-		#logging("DEBUG", "new timer still defined     #$timerevent_entry");
-	} else {
-		#logging("DEBUG", "new timer no longer defined #$timerevent_entry");
-	};
-};
-
-if (scalar(@oldtimers_delete) > 0) {
-	logging("DEBUG", "Following existing timers found which need to be removed (amount: " . scalar(@oldtimers_delete) . ") : @oldtimers_delete");
-
-	if ($svdrp_ro == 1) {
-		logging("NOTICE", "Do not delete old timers via SVDRP (read-only mode): " . scalar(@oldtimers_delete));
-	} else {
-		foreach my $num (reverse @oldtimers_delete) {
-			logging("INFO", "Delete old timer via SVDRP (simulation=$sim): " . $num);
-
-			# clean cache
-			undef %timers_cache;
-			$timers_cache{'cachestatus'} = "valid";
-
-                	my $result = $SVDRP->SendCMD("delt $num");
-			if ($result ne "1") {
-				logging("ERROR", "Delete of old timer was not successful: " . $result);
-			};
-                };
-	};
-} else {
-	logging("INFO", "No existing timers need to be removed");
-};
-
-if (scalar(@newtimers_cleaned) > 0) {
-	logging("DEBUG", "Following amount of new timers will be added: " . scalar(@newtimers_cleaned));
-
-	# und neue Timer eintragen
-	foreach my $timerevent (@newtimers_cleaned) {
-		my $text = "$timerevent->{timer_day} $timerevent->{anfang}-$timerevent->{ende} '";
-		my $summary = $$timerevent{'summary'};
-		my $title   = $$timerevent{'title'};
-		my $folder  = createfoldername(split /,/, $$timerevent{'tvinfo_folder'});
-		if ($folder ne ".") {
-			$title = $folder . "~" . $title;
-		};
-
-		if (length($title) > 40) {
-			$text .= substr($title, 0, 40-3) . "...'";
 		} else {
-			$text .= $title . "'";
+			$loglevel = "WARN";
+			$action_text = "SKIP - CHANNEL-MISSING-IN-DVR:";
+			$action_text .= get_service_channel_name_by_cid($$s_timer_hp{'cid'});
+			$s_timers_action{$s_timer_num} = "skip/missing-channel";
 		};
 
-		# Add tokens
-		$summary .= "|" . $tvinfoprefix; # extend summary with tvinfo informations
-		$summary .= "(tvinfo-user=" . $$timerevent{'tvinfo_user'} . ")";
-		$summary .= "(tvinfo-folder=" . $$timerevent{'tvinfo_folder'} . ")";
-
-		$text .= " summary='..." . substr($summary, length($summary) - 80, 80) . "'" if ($debug == 1);
-
-		if ($svdrp_ro == 1) {
-			logging("NOTICE", "Do not program timer via SVDRP (read-only mode): $text");
-		} else {  
-			logging("DEBUG", "Try to program timer via SVDRP (simulation=$sim): $text");
-
-			# clean cache
-			undef %timers_cache;
-			$timers_cache{'cachestatus'} = "valid";
-
-			my($result) = $SVDRP->SendCMD("newt 1:" . $$timerevent{'channel_id'} . ":" . $$timerevent{'timer_day'} . ":" . $$timerevent{'anfang'} . ":" . $$timerevent{'ende'} . ":$prio:$lifetime:$title:$summary");
-			if ($result =~ m/^(\d+)\s+1:/) {
-				logging("INFO", "Successful programmed timer via SVDRP (simulation=$sim): #$1 $text");
-			} else {
-				logging("ERROR", "Problem programming new timer via SVDRP (simulation=$sim): $result $text");
-			}
-		};
-	}
+		logging($loglevel, "SERVICE/DVR: SERVICE timer not found in DVR:"
+			. " tid="    . $$s_timer_hp{'tid'} 
+			. " cid="    . $$s_timer_hp{'cid'} . " (" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+			. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+			. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+			. " title='" . $$s_timer_hp{'title'} . "'"
+			. " s_d="    . $$s_timer_hp{'service_data'}
+			. " " . $action_text
+		);
+	};
 } else {
-	logging("INFO", "No new timers need to be added");
+	logging("DEBUG", "MATCH: all SERVICE timers found in DVR: " . $setup{'service'} . ":" . $config{'service.user'});
 };
 
-$SVDRP->close;
+## check for timers found in DVR but not provided by SERVICE
+if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
+	my $service_data = $setup{'service'} . ":" . $config{'service.user'};
+	my $dvr_data_prefix = $config{'service.user'} . "folder:";
 
-if ($opt_S) {
-	if ((scalar(@oldtimers_delete) == 0) && (scalar(@newtimers_cleaned) == 0) && $logging_highestlevel > 4) {
-		# nothing to do
-	} else {
-		# print messages
-		for my $line (@logging_summary) {
-			print STDOUT $line . "\n";
+	foreach my $d_timer_num (@d_timers_num) {
+		# already found?
+		next if (grep /^$d_timer_num$/, @d_timers_num_found); 
+
+		my $d_timer_hp = $d_timers_entries{$d_timer_num};
+
+		logging("DEBUG", "SERVICE/DVR: DVR timer not found in SERVICE:"
+			. " tid="    . $d_timer_num 
+			. " cid="    . $$d_timer_hp{'cid'} 
+			. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
+			. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " title='" . $$d_timer_hp{'title'} . "'"
+			. " s_d="    . $$d_timer_hp{'service_data'}
+		);
+
+		if ($$d_timer_hp{'stop_ut'} < time()) {
+			logging("DEBUG", "SERVICE/DVR: skip DVR timer, stop time in the past: tid=" . $d_timer_num);
+			next;
+		} elsif ($$d_timer_hp{'start_ut'} < time()) {
+			logging("DEBUG", "SERVICE/DVR: skip DVR timer, start time in the past: tid=" . $d_timer_num);
+			next;
+		};
+
+		if ($service_data eq $$d_timer_hp{'service_data'}) {
+			logging("INFO", "SERVICE/DVR: DVR timer belongs only to " . $service_data . ":"
+				. " tid=" . $$d_timer_hp{'tid'}
+				. " cid=" . $$d_timer_hp{'cid'}
+				. " s_d=" . $$d_timer_hp{'service_data'}
+				. " TODO-DELETE"
+			);
+			$d_timers_action{$d_timer_num}->{'delete'} = 1;
+		} elsif (grep /^$service_data$/, split(",", $$d_timer_hp{'service_data'})) { 
+			logging("INFO", "SERVICE/DVR: DVR timer belongs also to " . $service_data . ":"
+				. " tid=" . $$d_timer_hp{'tid'}
+				. " cid=" . $$d_timer_hp{'cid'}
+				. " s_d=" . $$d_timer_hp{'service_data'}
+				. " TODO-REMOVE-FROM-SERVICE-DATA"
+			);
+			# remove from service_data
+			$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = join(",", (grep (!/^$service_data$/, split(",", $$d_timer_hp{'service_data'}))));
+			# remove entries from dvr_data
+			$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = join(",", (grep (!/^$dvr_data_prefix/, split(",", $$d_timer_hp{'dvr_data'}))));
+		} else {
+			logging("DEBUG", "SERVICE/DVR: DVR timer do not belong to " . $service_data . ":"
+				. " tid=" . $$d_timer_hp{'tid'}
+				. " cid=" . $$d_timer_hp{'cid'}
+				. " s_d=" . $$d_timer_hp{'service_data'}
+				. " NO-ACTION"
+			);
 		};
 	};
+} else {
+	logging("DEBUG", "MATCH: all DVR timers found in SERVICE");
+};
+
+## display DVR actions
+if (scalar(keys %d_timers_action) > 0) {
+	foreach my $d_timer_num (sort { $a <=> $b } keys %d_timers_action) {
+		my $d_timer_hp = $d_timers_entries{$d_timer_num};
+
+		logging("INFO", "DVR-ACTION:"
+			. " tid=" . $d_timer_num
+			. " action=" . (keys($d_timers_action{$d_timer_num}))[0]
+			. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
+			. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " cid="  . $$d_timer_hp{'cid'} . "(" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . ")"
+			. " title='" . $$d_timer_hp{'title'} . "'"
+		);
+	};
+} else {
+	logging("INFO", "DVR-ACTION: no actions found - nothing to do");
+};
+
+## final preparation of SERVICE actions
+if (scalar(keys %s_timers_action) > 0) {
+	foreach my $s_timer_num (sort { $s_timers_action{$a} cmp $s_timers_action{$b} } sort { $a cmp $b } keys %s_timers_action) {
+		my $loglevel;
+		my $s_timer_hp = $s_timers_entries{$s_timer_num};
+
+		if ($s_timers_action{$s_timer_num} eq "add") {
+			$loglevel = "INFO";
+
+			# copy timer
+			my $serialized = freeze($s_timer_hp);
+			my %d_timer = %{ thaw($serialized) };
+
+			# add folder
+			$d_timer{'dvr_data'} = $config{'service.user'} . ":folder:" . $config{'dvr.folder'};
+
+			# change channel ID from SERVICE to DVR
+			$d_timer{'cid'} = $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'};
+
+			# remove sub-channel token
+			$d_timer{'cid'} =~ s/#.*$//o;
+
+			push @d_timers_new, \%d_timer;
+
+			logging($loglevel, "SERVICE-ACTION:"
+				. " tid="     . $s_timer_num
+				. " action="  . $s_timers_action{$s_timer_num}
+				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " d_cid="     . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
+				. " title='"  . $$s_timer_hp{'title'} . "'"
+			);
+		} else {
+			$loglevel = "NOTICE";
+
+			logging($loglevel, "SERVICE-ACTION:"
+				. " tid="     . $s_timer_num
+				. " action="  . $s_timers_action{$s_timer_num}
+				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " title='"  . $$s_timer_hp{'title'} . "'"
+			);
+		};
+	};
+} else {
+	logging("INFO", "SERVICE-ACTION: no actions found - nothing to do");
+};
+
+if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
+	$rc = dvr_create_update_delete_timers(\@timers_dvr, \%d_timers_action, \@d_timers_new);
+	logging("NOTICE", "result of create/update/delete: " . $rc);
+} else {
+	logging("INFO", "finally nothing to do");
 };
 
 exit(0);
-
