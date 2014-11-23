@@ -11,7 +11,7 @@ supported DVRs so far
 	- tvheadend
 
 supported systems
-	- reelbox (vdr)
+	- ReelBox (vdr)
 	- OpenELEC (tvheadend)
 
 

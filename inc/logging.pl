@@ -14,6 +14,8 @@ use strict;
 use warnings;
 use utf8;
 
+use Sys::Syslog;
+
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 

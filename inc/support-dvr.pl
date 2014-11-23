@@ -1,20 +1,24 @@
+# Project: tvinfomerk2vdr-ng.pl
+#
+#
 # Support functions for DVR
-# #
-# # (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
-# #
-# # License: GPLv2
-# #
-# # Authors:
-# #  Peter Bieringer (bie)
-# #
-# # Changelog:
-# # 20141115/bie: new
+#
+# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+#
+# License: GPLv2
+#
+# Authors:
+#  Peter Bieringer (bie)
+#
+# Changelog:
+# 20141115/bie: new
 
 use strict;
 use warnings;
 use utf8;
 
 our $foldername_max;
+our $titlename_max;
 
 our $debug;
 our %debug_class;
@@ -64,18 +68,37 @@ sub createfoldername(@) {
 ###############################################################################
 ## Create a combined folder name from timer data
 ###############################################################################
-sub dvr_create_foldername_from_timer_data($) {
+sub dvr_create_foldername_from_timer_data($;$) {
 	my $timer_hp = $_[0];
+	my $folder;
 
-	my @folder_list = grep(/:folder:/o, split(",", $$timer_hp{'dvr_data'}));
+	my @folder_list = grep(/:folder:/o, sort split(",", $$timer_hp{'dvr_data'}));
 	foreach (@folder_list) {
 		s/.*:folder://o;
 	};
 
 	#logging("DEBUG", "folder list=" . join(",", @folder_list));
-	my $folder = createfoldername(@folder_list);
+	if ((defined $_[1]) && ($_[1] eq "tvheadend")) {
+		$folder = join(":", @folder_list);
+	} else {
+		$folder = createfoldername(@folder_list);
+	};
 
 	return ($folder);
+};
+
+
+###############################################################################
+###############################################################################
+## Shorten title to titlename_max
+###############################################################################
+sub shorten_titlename($) {
+	if (length($_[0]) <= $titlename_max) {
+		# nothing to do
+		return($_[0]);
+	} else {
+		return(substr($_[0], 0, $titlename_max - 3) . "...");
+	};
 };
 
 

@@ -36,6 +36,7 @@
 use strict; 
 use warnings; 
 use utf8;
+
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
@@ -99,13 +100,11 @@ my $file_config = "config-ng.pl";
 push (@INC, "./");
 require ($file_config);
 
-push (@INC, "./inc");
-require ("logging.pl");
-require ("support-dvr.pl");
-require ("support-channels.pl");
-require ("support-channelmap.pl");
+require ("inc/logging.pl");
+require ("inc/support-dvr.pl");
+require ("inc/support-channels.pl");
+require ("inc/support-channelmap.pl");
 
-use Sys::Syslog;
 use Getopt::Long;
 
 my $result;
@@ -113,6 +112,7 @@ my $result;
 our $debug = 0;
 
 our $foldername_max = 15;
+our $titlename_max  = 40;
 
 
 our %debug_class = (
@@ -157,8 +157,8 @@ if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
 
 ## define defaults
 my @service_list_supported = ("tvinfo");
-my @dvr_list_supported      = ("vdr", "tvheadend");
-my @system_list_supported   = ("reelbox", "openelec");
+my @dvr_list_supported     = ("vdr", "tvheadend");
+my @system_list_supported  = ("reelbox", "openelec");
 
 ## define configuration
 our %config;
@@ -168,9 +168,6 @@ $config{'proxy'} = $http_proxy;
 
 ## define setup
 my %setup;
-
-$setup{'service'} = "tvinfo"; # default (only one supported so far)
-
 
 ## define debug/trace
 our %debugclass;
@@ -209,30 +206,6 @@ $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
 my $syslog_status = 0;
 my @logging_summary;
 my $logging_highestlevel = 7;
-
-
-## replace tokens in request
-sub request_replace_tokens($) {
-	my $request = shift || return 1;
-
-	logging("DEBUG", "request  original: " . $request);
-	logging("DEBUG", "username         : " . $username);
-	logging("DEBUG", "password         : " . $password);
-
-	# replace username token
-	my $passwordhash;
-	if ($password =~ /^{MD5}(.*)/) {
-		$passwordhash = $1;
-	} else {
-		$passwordhash = md5_hex($password);
-	};
-
-	$request =~ s/<USERNAME>/$username/;
-	$request =~ s/<PASSWORDHASH>/$passwordhash/;
-
-	logging("DEBUG", "request result   : " . $request);
-	return($request)
-};
 
 sub help() {
 	my $debug_class_string = join(" ", keys %debug_class);
@@ -356,6 +329,7 @@ my $options_result = GetOptions (
 
 	"O|property=s@"	=> \@opt_properties,
 	"h|help|\?"	=> \$opt_h,
+	"pc"		=> \$opt_print_config,
 );
 
 if ($options_result != 1) {
@@ -380,6 +354,9 @@ if (defined $opt_service) {
 		exit 2;
 	};
 	$setup{'service'} = $opt_service;
+} else {
+	# default
+	$setup{'service'} = "tvinfo"; # default (only one supported so far)
 };
 
 ## --dvr
@@ -459,7 +436,7 @@ if (defined $setupfile) {
 };
 
 ## Debug/verbose options
-$verbose = 1 if $opt_v;
+$verbose = 1 if (defined $opt_v || defined $opt_D || defined $opt_T);
 $debug = 1 if $opt_D;
 
 
@@ -539,7 +516,6 @@ if (defined $opt_C) {
 	};
 };
 
-
 ###############################################################################
 # Reading external values
 ###############################################################################
@@ -556,6 +532,19 @@ if (! defined $config{"dvr.margin.stop"}) {
 	$config{"dvr.margin.stop"} = 35; # minutes
 };
 
+
+###############################################################################
+# Print configuration
+###############################################################################
+if (defined $opt_print_config) {
+	print "# $progname/$progversion configuration\n";
+	print "#  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
+
+	for my $property (sort keys %config) {
+		printf "%s=%s\n", $property, $config{$property};
+	};
+	exit(0);
+};
 
 #############################################################
 #############################################################
@@ -604,7 +593,7 @@ my %service_channel_filter = (
 
 filter_service_channels(\@channels_service, \@channels_service_filtered, \%service_channel_filter);
 
-logging("INFO", "SERVICE channels after filtering/expanding (amount: " . scalar(@channels_service_filtered) . "):");
+logging("INFO", "SERVICE channels after filtering/expanding (amount: " . scalar(@channels_service_filtered) . "):") if ($verbose > 0);
 print_service_channels(\@channels_service_filtered);
 
 
@@ -627,7 +616,7 @@ my %dvr_channel_filter = (
 
 filter_dvr_channels(\@channels_dvr, \@channels_dvr_filtered, \%dvr_channel_filter);
 
-logging("INFO", "DVR channels after filtering/expanding (amount: " . scalar(@channels_dvr_filtered) . "):");
+logging("INFO", "DVR channels after filtering/expanding (amount: " . scalar(@channels_dvr_filtered) . "):") if ($verbose > 0);
 print_dvr_channels(\@channels_dvr_filtered);
 
 
@@ -822,6 +811,8 @@ foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timer
 		. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
 		. " title='" . $$d_timer_hp{'title'} . "'"
 		. " cname='" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . "'"
+		. " s_d="    . $$d_timer_hp{'service_data'}
+		. " d_d="    . $$d_timer_hp{'dvr_data'}
 	);
 };
 
@@ -902,8 +893,8 @@ foreach my $s_timer_num (@s_timers_num) {
 					. " UPDATE_REQUIRED (add s_d/d_d)"
 				);
 				# extend service_data & dvr_data
-				$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = $$s_timer_hp{'service_data'} . "," . $$d_timer_hp{'service_data'};
-				$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = $config{'service.user'} . ":folder:" . $config{'dvr.folder'} . "," . $$d_timer_hp{'dvr_data'};;
+				$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = join(",", sort split(",", $$s_timer_hp{'service_data'} . "," . $$d_timer_hp{'service_data'}));
+				$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = join(",", sort split(",", $config{'service.user'} . ":folder:" . $config{'dvr.folder'} . "," . $$d_timer_hp{'dvr_data'}));
 			};
 			last;
 		};
@@ -979,11 +970,11 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 				$d_timer_cid_main =~  s/#.*$//o;
 
 				if ($match == 1) {
-					logging("DEBUG", "selected channel of timer is included in timerange");
+					logging("DEBUG", "SERVICE/DVR: selected channel of timer is included in timerange");
 				} elsif ($match == 2) {
-					logging("WARN", "stop time of timer out of expanded channel timerange");
+					logging("DEBUG", "SERVICE/DVR: stop time of timer out of expanded channel timerange");
 				} else {
-					logging("WARN", "start time of timer out of expanded channel timerange");
+					logging("DEBUG", "SERVICE/DVR: start time of timer out of expanded channel timerange");
 					$loglevel = "WARN";
 					$s_timers_action{$s_timer_num} = "skip/out-of-channel-timerange";
 					$action_text = "SKIP - CHANNEL-MISSING-IN-DVR:NOT-IN-TIMERANGE:";
@@ -1001,13 +992,13 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 
 		logging($loglevel, "SERVICE/DVR: SERVICE timer not found in DVR:"
 			. " tid="    . $$s_timer_hp{'tid'} 
-			. " cid="    . $$s_timer_hp{'cid'} . " (" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+			. " cid="    . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
 			. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
 			. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 			. " title='" . $$s_timer_hp{'title'} . "'"
 			. " s_d="    . $$s_timer_hp{'service_data'}
 			. " " . $action_text
-		);
+		) if ($verbose > 0);
 	};
 } else {
 	logging("DEBUG", "MATCH: all SERVICE timers found in DVR: " . $setup{'service'} . ":" . $config{'service.user'});
@@ -1016,7 +1007,7 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 ## check for timers found in DVR but not provided by SERVICE
 if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 	my $service_data = $setup{'service'} . ":" . $config{'service.user'};
-	my $dvr_data_prefix = $config{'service.user'} . "folder:";
+	my $dvr_data_prefix = $config{'service.user'} . ":folder:";
 
 	foreach my $d_timer_num (@d_timers_num) {
 		# already found?
@@ -1031,7 +1022,7 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 			. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
 			. " title='" . $$d_timer_hp{'title'} . "'"
 			. " s_d="    . $$d_timer_hp{'service_data'}
-		);
+		) if ($verbose > 0);
 
 		if ($$d_timer_hp{'stop_ut'} < time()) {
 			logging("DEBUG", "SERVICE/DVR: skip DVR timer, stop time in the past: tid=" . $d_timer_num);
@@ -1047,7 +1038,7 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 				. " cid=" . $$d_timer_hp{'cid'}
 				. " s_d=" . $$d_timer_hp{'service_data'}
 				. " TODO-DELETE"
-			);
+			) if ($verbose > 0);
 			$d_timers_action{$d_timer_num}->{'delete'} = 1;
 		} elsif (grep /^$service_data$/, split(",", $$d_timer_hp{'service_data'})) { 
 			logging("INFO", "SERVICE/DVR: DVR timer belongs also to " . $service_data . ":"
@@ -1057,9 +1048,9 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 				. " TODO-REMOVE-FROM-SERVICE-DATA"
 			);
 			# remove from service_data
-			$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = join(",", (grep (!/^$service_data$/, split(",", $$d_timer_hp{'service_data'}))));
+			$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = join(",", sort (grep (!/^$service_data$/, split(",", $$d_timer_hp{'service_data'}))));
 			# remove entries from dvr_data
-			$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = join(",", (grep (!/^$dvr_data_prefix/, split(",", $$d_timer_hp{'dvr_data'}))));
+			$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = join(",", sort (grep (!/^$dvr_data_prefix/, split(",", $$d_timer_hp{'dvr_data'}))));
 		} else {
 			logging("DEBUG", "SERVICE/DVR: DVR timer do not belong to " . $service_data . ":"
 				. " tid=" . $$d_timer_hp{'tid'}
@@ -1122,7 +1113,7 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
 				. " d_cid="     . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
-				. " title='"  . $$s_timer_hp{'title'} . "'"
+				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
 		} else {
 			$loglevel = "NOTICE";
@@ -1133,7 +1124,7 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
 				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
-				. " title='"  . $$s_timer_hp{'title'} . "'"
+				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
 		};
 	};
@@ -1143,7 +1134,7 @@ if (scalar(keys %s_timers_action) > 0) {
 
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = dvr_create_update_delete_timers(\@timers_dvr, \%d_timers_action, \@d_timers_new);
-	logging("NOTICE", "result of create/update/delete: " . $rc);
+	logging(($rc > 0) ? "WARN" : "INFO", "result of create/update/delete: " . $rc);
 } else {
 	logging("INFO", "finally nothing to do");
 };

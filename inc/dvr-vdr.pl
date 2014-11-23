@@ -6,6 +6,10 @@
 #
 # License: GPLv2
 #
+# Implementation
+# service_data: ',' separated, stored in summary
+# dvr_data    : stored in summary and realized by (shortened) prefix to title
+#
 # Authors:
 #  Peter Bieringer (bie)
 #
@@ -32,6 +36,7 @@ our %config;
 
 ## defaults
 $config{"dvr.vdr.file.setup"} = "/etc/vdr/setup.conf";
+my $port;
 
 ################################################################################
 ################################################################################
@@ -61,6 +66,11 @@ sub dvr_init() {
 	$config{"dvr.margin.start"} = $MarginStart if defined ($MarginStart);
 	$config{"dvr.margin.stop"}  = $MarginStop  if defined ($MarginStop);
 
+	$port = 2001; # default
+	if (defined $config{'dvr.port'}) {
+		$port = $config{'dvr.port'};
+	};
+
 	return 1;
 };
 
@@ -80,11 +90,6 @@ sub dvr_get_channels($) {
 	my $channels_source_url;
 	my $result;
 	my $file;
-
-	my $port = 2001; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
 
 	$file = undef;
 
@@ -118,11 +123,6 @@ sub dvr_get_timers($) {
 	my $result;
 	my $file;
 	my $timers_file = $config{'dvr.host'} . "-timers.svdrp";
-
-	my $port = 2001; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
 
 	## preparation for fetching timers
 	$file = undef;
@@ -217,7 +217,7 @@ sub dvr_get_timers($) {
 
 		if ($$timer_hp{'dvr_data'} eq "") {
 			if (defined $folder) {
-				$$timer_hp{'dvr_data'} = "dvr:folder:" . $folder;
+				$$timer_hp{'dvr_data'} = "local:folder:" . $folder;
 			};
 		};
 
@@ -260,11 +260,6 @@ sub dvr_create_update_delete_timers($$$) {
 	my $timers_file = $config{'dvr.host'} . "-timers-actions.svdrp";
 	my $timers_action_url;
 
-	my $port = 2001; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
-
 	## preparation for applying actions on timers
 	$file = undef;
 	if ($config{'dvr.destination.type'} eq "file") {
@@ -284,7 +279,7 @@ sub dvr_create_update_delete_timers($$$) {
 	## run through timers actions
 	foreach my $d_timer_num (sort { $a <=> $b } keys %$d_timers_action_hp) {
 		my $action = (keys($$d_timers_action_hp{$d_timer_num}))[0];
-		logging("INFO", "VDR-ACTION: tid=" . $d_timer_num . " action=" . $action);
+		#logging("INFO", "VDR-ACTION: tid=" . $d_timer_num . " action=" . $action);
 		if ($action eq "delete") {
 			push @d_timers_delete, $d_timer_num;
 		} elsif ($action eq "modify") {

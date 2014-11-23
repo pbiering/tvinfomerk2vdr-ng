@@ -13,12 +13,14 @@
 use strict;
 use warnings;
 use utf8;
+
 use Data::Dumper;
 use LWP;
 use HTTP::Request::Common;
 use XML::Simple;
 use Encode;
 use Date::Manip;
+use Digest::MD5 qw(md5_hex);
 
 ## debug/trace information
 our %traceclass;
@@ -43,6 +45,30 @@ my %tvinfo_MeineSender_id_list;
 my %tvinfo_channel_name_by_id;
 my %tvinfo_channel_id_by_name;
 
+
+
+## replace tokens in request
+sub request_replace_tokens($) {
+	my $request = shift || return 1;
+
+	logging("DEBUG", "request  original: " . $request);
+	logging("DEBUG", "username         : " . $config{'service.user'});
+	logging("DEBUG", "password         : " . $config{'service.password'});
+
+	# replace username token
+	my $passwordhash;
+	if ($config{'service.password'} =~ /^{MD5}(.*)/) {
+		$passwordhash = $1;
+	} else {
+		$passwordhash = md5_hex($config{'service.password'});
+	};
+
+	$request =~ s/<USERNAME>/$config{'service.user'}/;
+	$request =~ s/<PASSWORDHASH>/$passwordhash/;
+
+	logging("DEBUG", "request result   : " . $request);
+	return($request)
+};
 
 ################################################################################
 ################################################################################

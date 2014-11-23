@@ -6,6 +6,10 @@
 #
 # License: GPLv2
 #
+# Implementation
+#  service_data: ',' separated config_name containing $service:$user
+#  dvr_data    : folders are stored in config and are separated by ':'
+#
 # Authors:
 #  Peter Bieringer (bie)
 #
@@ -36,6 +40,8 @@ our %config;
 my %tvheadend_confignames;
 my %tvheadend_configs;
 
+my $port;
+
 
 ################################################################################
 ################################################################################
@@ -44,6 +50,12 @@ my %tvheadend_configs;
 sub dvr_init() {
 	# TODO: retrieve global default margins (tvheadend has margins per config)
 	my ($MarginStart, $MarginStop);
+
+	# destination port
+	$port = 9981; # default
+	if (defined $config{'dvr.port'}) {
+		$port = $config{'dvr.port'};
+	};
 
 	return 1;
 };
@@ -66,11 +78,6 @@ sub dvr_get_channels($) {
 	my $file;
 	my $adapters_file = $config{'dvr.host'} . "-tv-adapter.json";
 	my $channels_file = $config{'dvr.host'} . "-channels.json";
-
-	my $port = 9981; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
 
 	## preparation for fetching adapters
 	$file = undef;
@@ -145,11 +152,6 @@ sub dvr_get_timers($) {
 	my @confignames;
 	my @configs;
 
-	my $port = 9981; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
-
 	## preparation for configs
 	$file = undef;
 	if ($config{'dvr.source.type'} eq "file") {
@@ -222,10 +224,24 @@ sub dvr_get_timers($) {
 			# config is equal to service_data
 			$$timer_hp{'service_data'} = $$timer_hp{'config'};
 
+			# create list of users
+			my @users;
+			foreach my $service_user (split(",", $$timer_hp{'service_data'})) {
+				$service_user =~ /^([^:]+):([^:]+)$/o;
+				my ($service, $user) = ($1, $2);
+				push @users, $user;
+			};
+
 			# retrieve folder from storage
+			my @dvr_data;
 			$tvheadend_configs{$$timer_hp{'config'}}->{'storage'} =~ /.*\/([^\/]*)\/?/o;
 			if (defined $1) {
-				$$timer_hp{'dvr_data'} = "dvr:folder:" . $1;
+				my $c = 0;
+				foreach my $folder (split(":", $1)) {
+					push @dvr_data, $users[$c] . ":folder:" . $folder;
+					$c++;
+				};
+				$$timer_hp{'dvr_data'} = join(",", @dvr_data);
 			};
 		} else {
 			$$timer_hp{'service_data'} = "system:local";
@@ -269,13 +285,8 @@ sub dvr_create_update_delete_timers($$$) {
 
 	my $result;
 	my $file;
-	my $timers_file = $config{'dvr.host'} . "-timers-actions.json";
+	my $timers_file = $config{'dvr.host'} . "-timers-actions.http";
 	my $timers_action_url;
-
-	my $port = 9981; # default
-	if (defined $config{'dvr.port'}) {
-		$port = $config{'dvr.port'};
-	};
 
 	## preparation for applying actions on timers
 	$file = undef;
@@ -332,7 +343,7 @@ sub dvr_create_update_delete_timers($$$) {
 	foreach my $timer_hp (@d_timers_new) {
 		$$timer_hp{'config'} = $$timer_hp{'service_data'};
 
-		my $folder = dvr_create_foldername_from_timer_data($timer_hp);
+		my $folder = dvr_create_foldername_from_timer_data($timer_hp, "tvheadend");
 
 		# check configuration
 		my $flag_create_adjust_config = undef;
