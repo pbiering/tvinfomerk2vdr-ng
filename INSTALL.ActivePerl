@@ -1,14 +1,11 @@
-tvinfomerk2vdr-ng
-=================
+tvinfomerk2vdr-ng/ActivePerl
+==========================
 
 Prerequisites:
 --------------
-- download package
-- follwing installations depending on system
-	INSTALL.OpenELEC
-	INSTALL.ReelBox
-
-
+- local destination path
+	OpenELEC: below /storage
+	Others:   TODO
 
 - downloaded package
    Browse to http://www.activestate.com/activeperl/downloads
