@@ -54,12 +54,13 @@ sub createfoldername(@) {
 	my $result = "";
 	for my $folder (sort keys %uniq) {
 		if ($folder eq ".") {
-			$result = ".";
-			last;
+			next; # skip this folder
 		};
 		$result .= substr($folder, 0, $length_entry);
 	};
-	
+
+	$result = "." if ($result eq ""); # map empty to 'no-folder'
+
 	return ($result);
 };
 
@@ -74,12 +75,17 @@ sub dvr_create_foldername_from_timer_data($;$) {
 
 	my @folder_list = grep(/:folder:/o, sort split(",", $$timer_hp{'dvr_data'}));
 	foreach (@folder_list) {
-		s/.*:folder://o;
+		s/.*:folder://o; # remove token
 	};
 
 	#logging("DEBUG", "folder list=" . join(",", @folder_list));
 	if ((defined $_[1]) && ($_[1] eq "tvheadend")) {
+		foreach (@folder_list) {
+			s/^\.$//o; # replace '.' by empty
+		};
 		$folder = join(":", @folder_list);
+
+		$folder = "." if ($folder =~ /^:+$/o); # map complete empty folder to 'no-folder'
 	} else {
 		$folder = createfoldername(@folder_list);
 	};
@@ -111,7 +117,7 @@ sub dvr_convert_timers_channels($$) {
 	my $timers_ap = $_[0];
 	my $channels_ap = $_[1];
 
-	logging("DEBUG", "dvr_convert_timers_channels called");
+	#logging("DEBUG", "dvr_convert_timers_channels called");
 
 	# create hash with names and altnames
 	my %channels_lookup_by_name;

@@ -40,7 +40,7 @@ use utf8;
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
-our $progname = "tvinfomerk2vdr-ng";
+our $progname = "tvinfomerk2vdr-ng.pl";
 our $progversion = "1.0.0";
 
 ## Requirements:
@@ -125,6 +125,7 @@ our %debug_class = (
 	"HTSP"        => 0,
 	"CHANNELS"    => 0,
 	"TVINFO"      => 0,
+	"TVHEADEND"   => 0,
 	"Channelmap"  => 0,
 	"MeineSender" => 0,
 	"AlleSender"  => 0,
@@ -208,13 +209,20 @@ my @logging_summary;
 my $logging_highestlevel = 7;
 
 sub help() {
-	my $debug_class_string = join(" ", keys %debug_class);
+	my $debug_class_string = join(" ", sort keys %debug_class);
 	my $service_list_supported_string = join(" ", @service_list_supported);
-	my $dvr_list_supported_string      = join(" ", @dvr_list_supported);
-	my $system_list_supported_string   = join(" ", @system_list_supported);
+	my $dvr_list_supported_string     = join(" ", @dvr_list_supported);
+	my $system_list_supported_string  = join(" ", @system_list_supported);
 
-	print qq{
-Usage: $0 [options]
+	print qq{$progname/$progversion : SERVICE to DVR timer synchronization tool
+
+Usage:
+	SERVICE/DVR channel map (configuration)
+         $progname -U <service-user> -P <service-password> -c
+         $progname -U <service-user> -P <service-password> --scs
+
+	SERVICE/DVR timer synchronization (regular usage)
+         $progname -U <service-user> -P <service-password> [-F <folder>]
 
 Options: 
          -L                        use syslog instead of stderr
@@ -273,6 +281,21 @@ Debug options:
 # Main
 ###############################################################################
 ###############################################################################
+
+###############################################################################
+# Defaults (partially by autodetection)
+###############################################################################
+
+$setup{'service'} = "tvinfo"; # default (only one supported so far)
+
+$setup{'dvr'} = ""; # TODO: autodetect
+
+$setup{'system'} = ""; #TODO: autodetect
+
+$config{'dvr.host'} = "localhost" if (! defined $config{'dvr.host'});
+
+$username = "" if (! defined $username);
+$password = "" if (! defined $password);
 
 ###############################################################################
 # Options parsing
@@ -354,9 +377,6 @@ if (defined $opt_service) {
 		exit 2;
 	};
 	$setup{'service'} = $opt_service;
-} else {
-	# default
-	$setup{'service'} = "tvinfo"; # default (only one supported so far)
 };
 
 ## --dvr
@@ -422,6 +442,8 @@ if (defined $opt_F) {
 		print "ERROR : unsupported folder: " . $opt_F . "\n";
 		exit 2;
 	};
+} else {
+	$config{'dvr.folder'} = "."; # special value for "no-folder"
 };
 
 
@@ -1007,7 +1029,7 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 ## check for timers found in DVR but not provided by SERVICE
 if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 	my $service_data = $setup{'service'} . ":" . $config{'service.user'};
-	my $dvr_data_prefix = $config{'service.user'} . ":folder:";
+	my $dvr_data_prefix = $config{'service.user'} . ":";
 
 	foreach my $d_timer_num (@d_timers_num) {
 		# already found?
@@ -1049,7 +1071,7 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 			);
 			# remove from service_data
 			$d_timers_action{$d_timer_num}->{'modify'}->{'service_data'} = join(",", sort (grep (!/^$service_data$/, split(",", $$d_timer_hp{'service_data'}))));
-			# remove entries from dvr_data
+			# remove entries related to user from dvr_data
 			$d_timers_action{$d_timer_num}->{'modify'}->{'dvr_data'} = join(",", sort (grep (!/^$dvr_data_prefix/, split(",", $$d_timer_hp{'dvr_data'}))));
 		} else {
 			logging("DEBUG", "SERVICE/DVR: DVR timer do not belong to " . $service_data . ":"

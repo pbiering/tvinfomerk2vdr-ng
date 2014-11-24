@@ -3,16 +3,11 @@ tvinfomerk2vdr-ng
 
 SERVICE to DVR timer importer Next Generation
 
-supported SERVICES so far:
-	- TVinfo (Merkzettel)
+supported SERVICEs so far: TVinfo (Merkzettel)
 
-supported DVRs so far
-	- vdr
-	- tvheadend
+supported DVRs: vdr, tvheadend
 
-supported systems
-	- ReelBox (vdr)
-	- OpenELEC (tvheadend)
+supported SYSTEMs: ReelBox (vdr), OpenELEC (tvheadend)
 
 
 This sophisticated Perl program pulls channels and timers from supported SERVICE and updates DVR timers accordingly (add, change, delete).

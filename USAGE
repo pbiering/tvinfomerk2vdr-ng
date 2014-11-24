@@ -1,0 +1,15 @@
+tvinfomerk2vdr-ng/USAGE
+=======================
+
+Prerequisites:
+--------------
+- installation
+- configuration
+
+
+Usage:
+------
+
+One-Time run in test mode (not applying any action)
+
+./tvinfomerk2vdr-ng.pl -U <service-user> -P <service-pass> -N

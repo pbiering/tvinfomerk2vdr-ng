@@ -211,6 +211,9 @@ sub dvr_get_timers($) {
 
 	## fetch timers
 	$result = protocol_htsp_get_timers($timers_ap, $timers_source_url, $file);
+	if ($result != 0) {
+		die "protocol_htsp_get_timers";
+	};
 
 	foreach my $timer_hp (@$timers_ap) {
 		## extract service/dvr data from config of timer
@@ -232,17 +235,27 @@ sub dvr_get_timers($) {
 				push @users, $user;
 			};
 
+			#logging("TRACE", "TVHEADEND: list of users: " . join(",", @users));
+
 			# retrieve folder from storage
 			my @dvr_data;
 			$tvheadend_configs{$$timer_hp{'config'}}->{'storage'} =~ /.*\/([^\/]*)\/?/o;
-			if (defined $1) {
+			if ((defined $1) && (length($1) > 0)) {
+				#logging("TRACE", "TVHEADEND: non-empty folder: " . $1);
 				my $c = 0;
 				foreach my $folder (split(":", $1)) {
+					$folder = "." if ((! defined $folder) || ($folder eq ""));
 					push @dvr_data, $users[$c] . ":folder:" . $folder;
 					$c++;
 				};
-				$$timer_hp{'dvr_data'} = join(",", @dvr_data);
+			} else {
+				#logging("TRACE", "TVHEADEND: empty folder");
+				foreach my $user (@users) {
+					push @dvr_data, $user . ":folder:.";
+				};
 			};
+			#logging("TRACE", "TVHEADEND: dvr data: " . join(",", @dvr_data));
+			$$timer_hp{'dvr_data'} = join(",", @dvr_data);
 		} else {
 			$$timer_hp{'service_data'} = "system:local";
 		};
@@ -257,10 +270,6 @@ sub dvr_get_timers($) {
 			. " s_d="      . $$timer_hp{'service_data'}
 			. " d_d="      . $$timer_hp{'dvr_data'}
 		);
-	};
-
-	if ($result != 0) {
-		die "protocol_htsp_get_timers";
 	};
 };
 
@@ -344,6 +353,7 @@ sub dvr_create_update_delete_timers($$$) {
 		$$timer_hp{'config'} = $$timer_hp{'service_data'};
 
 		my $folder = dvr_create_foldername_from_timer_data($timer_hp, "tvheadend");
+		$folder = "" if ($folder eq "."); # clear non-empty folder
 
 		# check configuration
 		my $flag_create_adjust_config = undef;

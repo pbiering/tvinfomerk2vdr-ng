@@ -205,9 +205,11 @@ sub dvr_get_timers($) {
 
 		# remove folder from title
 		my $folder;
-		if ($$timer_hp{'title'} =~ /^(.*)~(.*)/) {
+		if ($$timer_hp{'title'} =~ /^([^~]*)~(.*)/) {
 			$folder = $1;
 			$$timer_hp{'title'} = $2;
+		} else {
+			$folder = "."; # 'no-folder'
 		};
 
 		# fallback defaults
@@ -329,7 +331,7 @@ sub dvr_create_update_delete_timers($$$) {
 
 		my $folder = dvr_create_foldername_from_timer_data($timer_hp);
 
-		if (length($folder) > 0) {
+		if ((length($folder) > 0) && ($folder ne ".")) {
 			$$timer_hp{'title'} = $folder . "~" . $$timer_hp{'title'};
 		};
 	};
