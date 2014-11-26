@@ -16,12 +16,28 @@ use strict;
 use warnings;
 use utf8;
 
+## global variables
+our $progname;
+our $progversion;
+our %config;
+
+## activate module
+our  @system_list_supported;
+push @system_list_supported, "openelec";
+our %module_functions;
+$module_functions{'system'}->{'openelec'}->{'autodetect'} = \&system_openelec_autodetect;
 
 ## debug/trace information
 our %traceclass;
 our %debugclass;
 
-## currently nothing needed
+###############################################################################
+#### Autodetection
+#################################################################################
+sub system_openelec_autodetect() {
+	return 0;
+};
 
-#### require result
+
+#### END
 return 1;

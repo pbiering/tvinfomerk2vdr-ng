@@ -31,6 +31,13 @@ our $progname;
 our $progversion;
 our %config;
 
+## activate module
+our  @service_list_supported;
+push @service_list_supported, "tvinfo";
+our %module_functions;
+$module_functions{'service'}->{'tvinfo'}->{'get_channels'} = \&service_tvinfo_get_channels;
+$module_functions{'service'}->{'tvinfo'}->{'get_timers'} = \&service_tvinfo_get_timers;
+
 ## preparation for web requests
 my $tvinfo_client = LWP::UserAgent->new;
 $tvinfo_client->agent("Mozilla/4.0 ($progname $progversion)");
@@ -52,18 +59,18 @@ sub request_replace_tokens($) {
 	my $request = shift || return 1;
 
 	logging("DEBUG", "request  original: " . $request);
-	logging("DEBUG", "username         : " . $config{'service.user'});
-	logging("DEBUG", "password         : " . $config{'service.password'});
+	logging("DEBUG", "username         : " . $config{'service.tvinfo.user'});
+	logging("DEBUG", "password         : " . $config{'service.tvinfo.password'});
 
 	# replace username token
 	my $passwordhash;
-	if ($config{'service.password'} =~ /^{MD5}(.*)/) {
+	if ($config{'service.tvinfo.password'} =~ /^{MD5}(.*)/) {
 		$passwordhash = $1;
 	} else {
-		$passwordhash = md5_hex($config{'service.password'});
+		$passwordhash = md5_hex($config{'service.tvinfo.password'});
 	};
 
-	$request =~ s/<USERNAME>/$config{'service.user'}/;
+	$request =~ s/<USERNAME>/$config{'service.tvinfo.user'}/;
 	$request =~ s/<PASSWORDHASH>/$passwordhash/;
 
 	logging("DEBUG", "request result   : " . $request);
@@ -84,7 +91,7 @@ sub request_replace_tokens($) {
 # XML structure:
 #    TODO
 ################################################################################
-sub service_get_channels($$;$) {
+sub service_tvinfo_get_channels($$;$) {
 	my $channels_ap = $_[0];
 
 	my @xml_list;
@@ -266,7 +273,7 @@ sub service_get_channels($$;$) {
 # XML structure:
 #    TODO
 ################################################################################
-sub service_get_timers($) {
+sub service_tvinfo_get_timers($) {
 	my $timers_ap = $_[0];
 
 	my @xml_list;
@@ -407,7 +414,7 @@ sub service_get_timers($) {
 			'cid'          => $tvinfo_channel_id_by_name{$xml_channel},
 			'title'        => $xml_title,
 			'genre'        => $$xml_entry_p{'nature'},
-			'service_data' => "tvinfo:" . $config{'service.user'}
+			'service_data' => "tvinfo:" . $config{'service.tvinfo.user'}
 		};
 
 		logging("DEBUG", "TVINFO: found timer:"
@@ -416,7 +423,7 @@ sub service_get_timers($) {
 			. " end="      . $xml_endtime   . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
 			. " channel='" . $xml_channel . "' (" . $tvinfo_channel_id_by_name{$xml_channel} . ")"
 			. " title='"   . $xml_title . "'"
-                        . " s_d="      . "tvinfo:" . $config{'service.user'}
+                        . " s_d="      . "tvinfo:" . $config{'service.tvinfo.user'}
 		);
 
 	};

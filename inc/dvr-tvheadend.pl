@@ -36,6 +36,15 @@ our $progname;
 our $progversion;
 our %config;
 
+## activate module
+our  @dvr_list_supported;
+push @dvr_list_supported, "tvheadend";
+our %module_functions;
+$module_functions{'dvr'}->{'tvheadend'}->{'init'} = \&dvr_tvheadend_init;
+$module_functions{'dvr'}->{'tvheadend'}->{'get_channels'} = \&dvr_tvheadend_get_channels;
+$module_functions{'dvr'}->{'tvheadend'}->{'get_timers'} = \&dvr_tvheadend_get_timers;
+$module_functions{'dvr'}->{'tvheadend'}->{'create_update_delete_timers'} = \&dvr_tvheadend_create_update_delete_timers;
+
 ## local variables
 my %tvheadend_confignames;
 my %tvheadend_configs;
@@ -47,7 +56,7 @@ my $port;
 ################################################################################
 # initialize values from DVR
 ################################################################################
-sub dvr_init() {
+sub dvr_tvheadend_init() {
 	# TODO: retrieve global default margins (tvheadend has margins per config)
 	my ($MarginStart, $MarginStop);
 
@@ -65,7 +74,7 @@ sub dvr_init() {
 # get channels from DVR
 # arg1: pointer to channel array
 ################################################################################
-sub dvr_get_channels($) {
+sub dvr_tvheadend_get_channels($) {
 	my $channels_ap = $_[0];
 
 	my @adapters;
@@ -139,7 +148,7 @@ sub dvr_get_channels($) {
 # get timers from DVR
 # arg1: pointer to timer array
 ################################################################################
-sub dvr_get_timers($) {
+sub dvr_tvheadend_get_timers($) {
 	my $timers_ap = $_[0];
 
 	my $timers_source_url;
@@ -283,7 +292,7 @@ sub dvr_get_timers($) {
 # 
 # TVHEADEND do not support update of timers, means they will be deleted and recreated
 ################################################################################
-sub dvr_create_update_delete_timers($$$) {
+sub dvr_tvheadend_create_update_delete_timers($$$) {
 	my $timers_dvr_ap = $_[0];
 	my $d_timers_action_hp = $_[1];
 	my $d_timers_new_ap = $_[2];

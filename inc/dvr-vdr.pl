@@ -34,6 +34,15 @@ our $progname;
 our $progversion;
 our %config;
 
+## activate module
+our  @dvr_list_supported;
+push @dvr_list_supported, "vdr";
+our %module_functions;
+$module_functions{'dvr'}->{'vdr'}->{'init'} = \&dvr_vdr_init;
+$module_functions{'dvr'}->{'vdr'}->{'get_channels'} = \&dvr_vdr_get_channels;
+$module_functions{'dvr'}->{'vdr'}->{'get_timers'} = \&dvr_vdr_get_timers;
+$module_functions{'dvr'}->{'vdr'}->{'create_update_delete_timers'} = \&dvr_vdr_create_update_delete_timers;
+
 ## defaults
 $config{"dvr.vdr.file.setup"} = "/etc/vdr/setup.conf";
 my $port;
@@ -42,7 +51,7 @@ my $port;
 ################################################################################
 # initialize values from DVR
 ################################################################################
-sub dvr_init() {
+sub dvr_vdr_init() {
 	my ($MarginStart, $MarginStop);
 
 	### read margins from VDR setup.conf
@@ -80,7 +89,7 @@ sub dvr_init() {
 # get channels from DVR
 # arg1: pointer to channel array
 ################################################################################
-sub dvr_get_channels($) {
+sub dvr_vdr_get_channels($) {
 	my $channels_ap = $_[0];
 
 	#print "DEBUG : " . $0 . __FILE__ . (caller(0))[3];
@@ -116,7 +125,7 @@ sub dvr_get_channels($) {
 # get timers from DVR
 # arg1: pointer to timer array
 ################################################################################
-sub dvr_get_timers($) {
+sub dvr_vdr_get_timers($) {
 	my $timers_ap = $_[0];
 
 	my $timers_source_url;
@@ -249,7 +258,7 @@ sub dvr_get_timers($) {
 # 
 # VDR do not support update of timers, means they will be deleted and recreated
 ################################################################################
-sub dvr_create_update_delete_timers($$$) {
+sub dvr_vdr_create_update_delete_timers($$$) {
 	my $timers_dvr_ap = $_[0];
 	my $d_timers_action_hp = $_[1];
 	my $d_timers_new_ap = $_[2];

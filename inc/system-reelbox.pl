@@ -16,13 +16,27 @@ use strict;
 use utf8;
 use warnings;
 
+## global variables
+our $progname;
+our $progversion;
+our %config;
+
+### activate module
+our  @system_list_supported;
+push @system_list_supported, "reelbox";
+our %module_functions;
+$module_functions{'system'}->{'reelbox'}->{'autodetect'} = \&system_reelbox_autodetect;
 
 ## debug/trace information
 our %traceclass;
 our %debugclass;
 
+###############################################################################
+### Autodetection
+################################################################################
+sub system_reelbox_autodetect() {
+	return 0;
+};
 
-## currently nothing needed
-
-#### require result
+#### END
 return 1;

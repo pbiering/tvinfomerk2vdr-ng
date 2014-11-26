@@ -98,7 +98,6 @@ our $progversion = "1.0.0";
 my $file_config = "config-ng.pl";
 
 push (@INC, "./");
-require ($file_config);
 
 require ("inc/logging.pl");
 require ("inc/support-dvr.pl");
@@ -142,7 +141,7 @@ our $http_proxy;
 our $username;
 our $password;
 our ($prio, $lifetime);
-our $setupfile;			# will be mapped to $config{"dvr." . $setup{'dvr'} . ".file.setup"}
+our $setupfile;			# no longer used
 our $networktimeout;
 our $skip_ca_channels;
 our $whitelist_ca_groups;
@@ -157,9 +156,15 @@ if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
 ###############################################################################
 
 ## define defaults
-my @service_list_supported = ("tvinfo");
-my @dvr_list_supported     = ("vdr", "tvheadend");
-my @system_list_supported  = ("reelbox", "openelec");
+my @service_modules = ("tvinfo");
+my @dvr_modules     = ("vdr", "tvheadend");
+my @system_modules  = ("reelbox", "openelec");
+
+our @service_list_supported;
+our @dvr_list_supported    ;
+our @system_list_supported ;
+
+our %module_functions;
 
 ## define configuration
 our %config;
@@ -229,6 +234,7 @@ Options:
          -S                        show summary to stdout in case of any changes or log messages > notice
          -h	                   Show this help text
          --pc	                   Print Config (and stop)
+         --config|rc <FILE>        Read Config (in properties format) from FILE
 
 Service related
          --service <name>          define SERVICE name
@@ -283,16 +289,67 @@ Debug options:
 ###############################################################################
 
 ###############################################################################
+# Load SERVICE/DVR/SYSTEM modules
+###############################################################################
+
+# generate list of modules
+my @modules;
+
+foreach my $service_module (@service_modules) {
+	push @modules, "inc/service-" . $service_module . ".pl";
+};
+foreach my $dvr_module (@dvr_modules) {
+	push @modules, "inc/dvr-" . $dvr_module . ".pl";
+};
+foreach my $system_module (@system_modules) {
+	push @modules, "inc/system-" . $system_module . ".pl";
+};
+
+# load modules if existing
+foreach my $module (@modules) {
+	if (-e $module) {
+		require($module);
+		logging("INFO", "load module: " . $module);
+	} else {
+		logging("WARN", "module not existing: " . $module);
+	};
+};
+
+# result
+logging("INFO", "list of supported SERVICEs: " . join(" ", @service_list_supported));
+logging("INFO", "list of supported DVRs    : " . join(" ", @dvr_list_supported));
+logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
+
+###############################################################################
 # Defaults (partially by autodetection)
 ###############################################################################
 
 $setup{'service'} = "tvinfo"; # default (only one supported so far)
 
-$setup{'dvr'} = ""; # TODO: autodetect
+$setup{'system'} = "";
+# Try to autodetect
+foreach my $system (@system_list_supported) {
+	if (defined $module_functions{'system'}->{$system}->{'autodetect'}) {
+		if ($module_functions{'system'}->{$system}->{'autodetect'}()) {
+			logging("INFO", "autodetected SYSTEM : " . $system);
+			$setup{'system'} = $system;
+			last;
+		};
+	};
+};
 
-$setup{'system'} = ""; #TODO: autodetect
-
-$config{'dvr.host'} = "localhost" if (! defined $config{'dvr.host'});
+$setup{'dvr'} = "";
+# Try to autodetect
+foreach my $dvr (@system_list_supported) {
+	if (defined $module_functions{'dvr'}->{$dvr}->{'autodetect'}) {
+		if ($module_functions{'dvr'}->{$dvr}->{'autodetect'}()) {
+			logging("INFO", "autodetected DVR: " . $dvr);
+			$setup{'dvr'} = $dvr;
+			$config{'dvr.host'} = "localhost";
+			last;
+		};
+	};
+};
 
 $username = "" if (! defined $username);
 $password = "" if (! defined $password);
@@ -305,7 +362,7 @@ my ($opt_read_service_from_file, $opt_read_dvr_from_file);
 my ($opt_write_service_to_file, $opt_write_dvr_to_file);
 my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
-my ($opt_print_config);
+my ($opt_print_config, $opt_config);
 
 Getopt::Long::config('bundling');
 
@@ -313,6 +370,9 @@ my $options_result = GetOptions (
 	"L"		=> \$opt_L,
 	"v"		=> \$opt_v,
 	"S"		=> \$opt_S,
+
+	# config file
+	"config|rc=s"	=> \$opt_config,
 
 	# DVR
 	"d=s" 		=> \$opt_d,
@@ -363,6 +423,61 @@ if ($options_result != 1) {
 if (defined $opt_h) {
 	help();
 	exit 1;
+};
+
+## Debug/verbose options
+$verbose = 1 if (defined $opt_v || defined $opt_D || defined $opt_T);
+$debug = 1 if $opt_D;
+
+
+###############################################################################
+# Read configuration from file
+###############################################################################
+
+logging("INFO", "try reading configuration from file (OLD FORMAT): " . $file_config);
+if (! -e $file_config) {
+	logging("NOTICE", "given config file is not existing: " . $file_config);
+} else {
+	require ($file_config) || die;
+	logging("INFO", "read configuration from file (OLD FORMAT): " . $file_config);
+
+	# map old options to new properties
+	$config{'service.' . $setup{'service'} . '.user'}     = $username if (defined $username);
+	$config{'service.' . $setup{'service'} . '.password'} = $password if (defined $password);
+};
+
+if (defined $opt_config) {
+	if (! -e $opt_config) {
+		logging("ERROR", "given config file is not existing: " . $opt_config);
+		exit 1;
+	};
+
+	logging("INFO", "try reading configuration from file: " . $opt_config);
+	if(!open(FILE, "<$opt_config")) {
+	logging("ERROR", "can't read configuration from file: " . $opt_config);
+		exit(1);
+	};
+
+	my $lc = 0;
+	while(<FILE>) {
+		$lc++;
+		chomp($_);
+		next if ($_ =~ /^#/o); # skip comments
+
+		if ($_ =~ /^\s*([^\s]+)\s*=\s*([^\s]*)\s*$/o) {
+			my ($key, $value) = ($1, $2);
+			logging("DEBUG", "read from config file: " . $key . "=" . $value);
+
+			if ($key =~ /^setup\.(.*)/o) {
+				$setup{$1} = $value;
+			} else {
+				$config{$key} = $value;
+			};
+		} else {
+			logging("WARN", "skip unparsable line in config file[" . $lc . "]: " . $_);
+		};
+	};
+	logging("INFO", "finished reading configuration from file: " . $opt_config);
 };
 
 
@@ -447,19 +562,11 @@ if (defined $opt_F) {
 };
 
 
-## load required related modules
-require("inc/system-"  . $setup{'system'}  . ".pl");
-require("inc/dvr-"     . $setup{'dvr'}     . ".pl");
-require("inc/service-" . $setup{'service'} . ".pl");
-
 ## map old config-ng.pl values to new structure
 if (defined $setupfile) {
-	$config{"dvr." . $setup{'dvr'} . ".file.setup"} = $setupfile;
+	print "ERROR : parameter 'setupfile' in config-ng.pl is no longer supported\n";
+	exit 2;
 };
-
-## Debug/verbose options
-$verbose = 1 if (defined $opt_v || defined $opt_D || defined $opt_T);
-$debug = 1 if $opt_D;
 
 
 ## debug: raw file read/write handling
@@ -496,34 +603,50 @@ if (defined $opt_N) {
 	$config{'dvr.destination.type'} = "network";
 };
 
-## SERVICE user/pass handling
-$username = $opt_U if $opt_U;
-$password = $opt_P if $opt_P;
+## SERVICE user handling
+if ($opt_U) {
+	$config{'service.' . $setup{'service'} . '.user'} = $opt_U;
+};
 
-if (! defined $username || $username eq "<TODO>") {
-	logging("ERROR", "SERVICE username not defined (use -U or specify in " . $file_config . ")");
+if (! defined $config{'service.' . $setup{'service'} . '.user'}) {
+	logging("ERROR", "SERVICE username not defined (use -U or specify in config file)");
+	exit 1;
+} elsif ($config{'service.' . $setup{'service'} . '.user'} eq "<TODO>") {
+	logging("ERROR", "SERVICE username not explicitly given, still default: " . $config{'service.' . $setup{'service'} . '.user'});
 	exit 1;
 };
 
+## SERVICE password handling
+if ($opt_P) {
+	$config{'service.' . $setup{'service'} . '.password'} = $opt_P;
+};
+
 if ($config{'service.source.type'} ne "file") {
-	if (! defined $password || $password eq "<TODO>") {
-		logging("ERROR", "SERVICE password not defined (use -P or specify in " . $file_config . ")");
+	if (! defined $config{'service.' . $setup{'service'} . '.password'}) {
+		if (! defined $password) {
+			logging("ERROR", "SERVICE password not defined (use -P or specify in config flie)");
+			exit 1;
+		};
+	} elsif ($config{'service.' . $setup{'service'} . '.password'} eq "<TODO>") {
+		logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.' . $setup{'service'} . '.password'});
 		exit 1;
 	};
 
 	if ($setup{'service'} eq "tvinfo") {
 		# TODO: move such option checks in service module
-		if ($password !~ /^{MD5}/) {
+		if ($config{'service.' . $setup{'service'} . '.password'} !~ /^{MD5}/) {
 			logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
 		};
 	};
 };
 
-$config{'service.user'}     = $username;
-$config{'service.password'} = $password;
-
 # defaults for read/write raw files
-$config{'service.source.file.prefix'}  = $setup{'service'} . "-" . $config{'service.user'};
+$config{'service.source.file.prefix'}  = $setup{'service'} . "-" . $config{'service.' . $setup{'service'} . '.user'};
+
+if (! defined $config{'dvr.host'}) {
+	logging("ERROR : DVR host not specified (and unable to autodetect)");
+	exit 2;
+};
 
 
 # Debug Class handling
@@ -542,7 +665,7 @@ if (defined $opt_C) {
 # Reading external values
 ###############################################################################
 
-dvr_init() || die "Problem with dvr_init";
+$module_functions{'dvr'}->{$setup{'dvr'}}->{'init'}() || die "Problem with dvr_init";
 
 if (! defined $config{"dvr.margin.start"}) {
 	logging("NOTICE", "DVR: no default MarginStart provided, take default (10 min)");
@@ -559,12 +682,19 @@ if (! defined $config{"dvr.margin.stop"}) {
 # Print configuration
 ###############################################################################
 if (defined $opt_print_config) {
+	logging("NOTICE", "print of configuration begin");
 	print "# $progname/$progversion configuration\n";
 	print "#  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
+
+	for my $setup_property (sort keys %setup) {
+		printf "setup.%s=%s\n", $setup_property, $setup{$setup_property};
+	};
 
 	for my $property (sort keys %config) {
 		printf "%s=%s\n", $property, $config{$property};
 	};
+
+	logging("NOTICE", "print of configuration end");
 	exit(0);
 };
 
@@ -599,7 +729,7 @@ sub get_service_channel_name_by_cid($) {
 #######################################
 ## Retrieve channnels from service
 #######################################
-$result = service_get_channels(\@channels_service);
+$result = $module_functions{'service'}->{$setup{'service'}}->{'get_channels'}(\@channels_service);
 
 if (scalar(@channels_service) == 0) {
 	logging("CRIT", "SERVICE amount of channels is ZERO - STOP");
@@ -622,7 +752,7 @@ print_service_channels(\@channels_service_filtered);
 #############################################################
 ## Retrieve channels from DVR
 #############################################################
-$result = dvr_get_channels(\@channels_dvr);
+$result = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_channels'}(\@channels_dvr);
 
 if (scalar(@channels_dvr) == 0) {
 	logging("CRIT", "DVR amount of channels is ZERO - STOP");
@@ -742,7 +872,7 @@ if (defined $opt_c) {
 #######################################
 my @timers_service;
 
-$rc = service_get_timers(\@timers_service);
+$rc = $module_functions{'service'}->{$setup{'service'}}->{'get_timers'}(\@timers_service);
 
 
 #######################################
@@ -750,7 +880,7 @@ $rc = service_get_timers(\@timers_service);
 #######################################
 my @timers_dvr;
 
-$rc = dvr_get_timers(\@timers_dvr);
+$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_timers'}(\@timers_dvr);
 
 # convert channels if necessary
 $rc = dvr_convert_timers_channels(\@timers_dvr, \@channels_dvr);
@@ -1028,8 +1158,8 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 
 ## check for timers found in DVR but not provided by SERVICE
 if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
-	my $service_data = $setup{'service'} . ":" . $config{'service.user'};
-	my $dvr_data_prefix = $config{'service.user'} . ":";
+	my $service_data = $setup{'service'} . ":" . $config{'service.' . $setup{'service'} . '.user'};
+	my $dvr_data_prefix = $config{'service.' . $setup{'service'} . '.user'} . ":";
 
 	foreach my $d_timer_num (@d_timers_num) {
 		# already found?
@@ -1118,7 +1248,7 @@ if (scalar(keys %s_timers_action) > 0) {
 			my %d_timer = %{ thaw($serialized) };
 
 			# add folder
-			$d_timer{'dvr_data'} = $config{'service.user'} . ":folder:" . $config{'dvr.folder'};
+			$d_timer{'dvr_data'} = $config{'service.' . $setup{'service'} .'.user'} . ":folder:" . $config{'dvr.folder'};
 
 			# change channel ID from SERVICE to DVR
 			$d_timer{'cid'} = $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'};
@@ -1155,7 +1285,7 @@ if (scalar(keys %s_timers_action) > 0) {
 };
 
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
-	$rc = dvr_create_update_delete_timers(\@timers_dvr, \%d_timers_action, \@d_timers_new);
+	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
 	logging(($rc > 0) ? "WARN" : "INFO", "result of create/update/delete: " . $rc);
 } else {
 	logging("INFO", "finally nothing to do");

@@ -311,7 +311,7 @@ sub protocol_svdrp_get_timers($$;$) {
 			$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		} else {
 			# shift to next day but same hh:mm
-			my $dor_stop = strftime("%Y%m%d", localtime(UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s") + 86400));
+			my $dor_stop = strftime("%Y%m%d", localtime(UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s") + 23*60*60)); # add 23 hours to catch DST
 			$stop_ut  = UnixDate(ParseDate($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		};
 
