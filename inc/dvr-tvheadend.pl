@@ -85,8 +85,8 @@ sub dvr_tvheadend_get_channels($) {
 	my $adapters_source_url;
 	my $result;
 	my $file;
-	my $adapters_file = $config{'dvr.host'} . "-tv-adapter.json";
-	my $channels_file = $config{'dvr.host'} . "-channels.json";
+	my $adapters_file = $config{'dvr.source.file.prefix'} . "-tv-adapter.json";
+	my $channels_file = $config{'dvr.source.file.prefix'} . "-channels.json";
 
 	## preparation for fetching adapters
 	$file = undef;
@@ -155,8 +155,8 @@ sub dvr_tvheadend_get_timers($) {
 	my $confignames_source_url;
 	my $result;
 	my $file;
-	my $timers_file = $config{'dvr.host'} . "_dvrlist_upcoming.json";
-	my $confignames_file = $config{'dvr.host'} . "-confignames.json";
+	my $timers_file = $config{'dvr.source.file.prefix'} . "_dvrlist_upcoming.json";
+	my $confignames_file = $config{'dvr.source.file.prefix'} . "-confignames.json";
 
 	my @confignames;
 	my @configs;
@@ -303,7 +303,7 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 
 	my $result;
 	my $file;
-	my $timers_file = $config{'dvr.host'} . "-timers-actions.http";
+	my $timers_file = $config{'dvr.source.file.prefix'} . "-timers-actions.http";
 	my $timers_action_url;
 
 	## preparation for applying actions on timers

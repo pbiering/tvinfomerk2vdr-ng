@@ -24,6 +24,7 @@ use utf8;
 
 use Data::Dumper;
 use POSIX qw(strftime);
+use IO::Socket::INET;
 
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
@@ -453,11 +454,9 @@ package SVDRP;
 
 my ($Dest, $Port);
 
-sub true       () { main::true(); }
-sub false      () { main::false(); };
 sub CRLF       () { main::CRLF(); };
 
-my($SOCKET, $EPGSOCKET, $query, $connected, $epg);
+my($SOCKET, $EPGSOCKET, $query, $connected);
 
 sub new {
 	my $invocant = shift;
@@ -468,9 +467,8 @@ sub new {
 	my $class = ref($invocant) || $invocant;
 	my $self = { };
 	bless($self, $class);
-	my $connected = false;
-	my $query = false;
-	my $epg = false;
+	my $connected = 0;
+	my $query = 0;
 	return $self;
 }
 
@@ -485,16 +483,16 @@ sub myconnect {
 
 		my $line;
 		$line = <$SOCKET>;
-		$connected = true;
+		$connected = 1;
 }
 
 sub close {
 	my $this = shift;
-	if($connected) {
+	if($connected == 1) {
 		command($this, "quit");
 		readoneline($this);
 		close $SOCKET if $SOCKET;
-		$connected = false;
+		$connected = 0;
 	}
 }
 
@@ -502,7 +500,7 @@ sub command {
 	my $this = shift;
 	my $cmd = join("", @_);
 
-	if(!$connected ) {
+	if((!defined $connected) || ($connected == 0)) {
 		myconnect($this);
 	}
 	
@@ -512,7 +510,7 @@ sub command {
 		my $result = send($SOCKET, $cmd, 0);
 		if($result != length($cmd)) {
 		} else {
-			$query = true;
+			$query = 1;
 		}
 		no bytes;
 	}
@@ -522,7 +520,7 @@ sub readoneline {
 	my $this = shift;
 	my $line;
 
-	if($connected and $query) {
+	if(($connected == 1) and ($query == 1)) {
 		$line = <$SOCKET>;
 		$line =~ s/\r\n$//;
 		if(substr($line, 3, 1) ne "-") {

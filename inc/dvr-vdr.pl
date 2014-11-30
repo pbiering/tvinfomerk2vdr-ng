@@ -103,7 +103,7 @@ sub dvr_vdr_get_channels($) {
 	$file = undef;
 
 	## preparation for fetching channels
-	my $channels_file = $config{'dvr.host'} . "-channels.svdrp";
+	my $channels_file = $config{'dvr.source.file.prefix'} . "-channels.svdrp";
 
 	$file = undef;
 	if ($config{'dvr.source.type'} eq "file") {
@@ -131,7 +131,7 @@ sub dvr_vdr_get_timers($) {
 	my $timers_source_url;
 	my $result;
 	my $file;
-	my $timers_file = $config{'dvr.host'} . "-timers.svdrp";
+	my $timers_file = $config{'dvr.source.file.prefix'} . "-timers.svdrp";
 
 	## preparation for fetching timers
 	$file = undef;
@@ -268,7 +268,7 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 
 	my $result;
 	my $file;
-	my $timers_file = $config{'dvr.host'} . "-timers-actions.svdrp";
+	my $timers_file = $config{'dvr.source.file.prefix'} . "-timers-actions.svdrp";
 	my $timers_action_url;
 
 	## preparation for applying actions on timers

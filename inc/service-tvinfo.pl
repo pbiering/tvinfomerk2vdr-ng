@@ -58,19 +58,28 @@ my %tvinfo_channel_id_by_name;
 sub request_replace_tokens($) {
 	my $request = shift || return 1;
 
+	if (! defined $config{'service.user'} || $config{'service.user'} eq "") {
+		logging("ERROR", "service.user empty or undefined - FIX CODE");
+		exit 2;
+	};
+	if (! defined $config{'service.password'} || $config{'service.password'} eq "") {
+		logging("ERROR", "service.password empty or undefined - FIX CODE");
+		exit 2;
+	};
+
 	logging("DEBUG", "request  original: " . $request);
-	logging("DEBUG", "username         : " . $config{'service.tvinfo.user'});
-	logging("DEBUG", "password         : " . $config{'service.tvinfo.password'});
+	logging("DEBUG", "username         : " . $config{'service.user'});
+	logging("DEBUG", "password         : " . $config{'service.password'});
 
 	# replace username token
 	my $passwordhash;
-	if ($config{'service.tvinfo.password'} =~ /^{MD5}(.*)/) {
+	if ($config{'service.password'} =~ /^{MD5}(.*)/) {
 		$passwordhash = $1;
 	} else {
-		$passwordhash = md5_hex($config{'service.tvinfo.password'});
+		$passwordhash = md5_hex($config{'service.password'});
 	};
 
-	$request =~ s/<USERNAME>/$config{'service.tvinfo.user'}/;
+	$request =~ s/<USERNAME>/$config{'service.user'}/;
 	$request =~ s/<PASSWORDHASH>/$passwordhash/;
 
 	logging("DEBUG", "request result   : " . $request);
@@ -414,7 +423,7 @@ sub service_tvinfo_get_timers($) {
 			'cid'          => $tvinfo_channel_id_by_name{$xml_channel},
 			'title'        => $xml_title,
 			'genre'        => $$xml_entry_p{'nature'},
-			'service_data' => "tvinfo:" . $config{'service.tvinfo.user'}
+			'service_data' => "tvinfo:" . $config{'service.user'}
 		};
 
 		logging("DEBUG", "TVINFO: found timer:"
@@ -423,7 +432,7 @@ sub service_tvinfo_get_timers($) {
 			. " end="      . $xml_endtime   . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
 			. " channel='" . $xml_channel . "' (" . $tvinfo_channel_id_by_name{$xml_channel} . ")"
 			. " title='"   . $xml_title . "'"
-                        . " s_d="      . "tvinfo:" . $config{'service.tvinfo.user'}
+                        . " s_d="      . "tvinfo:" . $config{'service.user'}
 		);
 
 	};

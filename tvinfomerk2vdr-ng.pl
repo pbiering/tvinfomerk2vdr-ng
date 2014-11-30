@@ -32,6 +32,7 @@
 # 20140802/pb: use new Station XML URL instead of HTML "Meine Sender"
 # 20140804/pb: add support for MD5 hashed password
 # 201411xx/pb: complete reorg, support now also DVR tvheadend via HTSP
+# 20141129/pb: hibernate support of dedicated SYSTEM (currently not needed)
 
 use strict; 
 use warnings; 
@@ -158,19 +159,16 @@ if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
 ## define defaults
 my @service_modules = ("tvinfo");
 my @dvr_modules     = ("vdr", "tvheadend");
-my @system_modules  = ("reelbox", "openelec");
+#my @system_modules  = ("reelbox", "openelec");
 
 our @service_list_supported;
 our @dvr_list_supported    ;
-our @system_list_supported ;
+#our @system_list_supported ;
 
 our %module_functions;
 
 ## define configuration
 our %config;
-
-# migration from config-ng.pl
-$config{'proxy'} = $http_proxy;
 
 ## define setup
 my %setup;
@@ -202,22 +200,31 @@ $traceclass{'HTSP'} = 0;
 
 $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
 
-
-
-###############################################################################
-## Functions
-###############################################################################
+## filled from properties (configuration) file
+my %properties;
+my @service_users;
+my @dvr_hosts;
 
 ## Logging
 my $syslog_status = 0;
 my @logging_summary;
 my $logging_highestlevel = 7;
 
+###############################################################################
+## Functions
+###############################################################################
+
 sub help() {
 	my $debug_class_string = join(" ", sort keys %debug_class);
 	my $service_list_supported_string = join(" ", @service_list_supported);
 	my $dvr_list_supported_string     = join(" ", @dvr_list_supported);
-	my $system_list_supported_string  = join(" ", @system_list_supported);
+	#my $system_list_supported_string  = join(" ", @system_list_supported);
+
+#System related
+#         --system <type>           define SYSTEM type
+#                                     default/configured: $setup{'system'}
+#                                     supported         : $system_list_supported_string
+
 
 	print qq{$progname/$progversion : SERVICE to DVR timer synchronization tool
 
@@ -233,8 +240,8 @@ Options:
          -L                        use syslog instead of stderr
          -S                        show summary to stdout in case of any changes or log messages > notice
          -h	                   Show this help text
-         --pc	                   Print Config (and stop)
-         --config|rc <FILE>        Read Config (in properties format) from FILE
+         --pp	                   Print Properties (and stop)
+         --properties|rp <FILE>    Read Properties from FILE
 
 Service related
          --service <name>          define SERVICE name
@@ -250,11 +257,6 @@ DVR related
          -d|--host <hostname>      DVR hostname (default: $config{'dvr.host'})
          -p <port>                 SVDRP/HTSP port number (default: 2001/9981)
          -F|--folder <folder>      folder for DVR records (default: none)
-
-System related
-         --system <type>           define SYSTEM type
-                                     default/configured: $setup{'system'}
-                                     supported         : $system_list_supported_string
 
 Channel Mapping
          -c                        show Channel Map results (and stop)
@@ -278,6 +280,7 @@ Debug options:
          -E|--sst <list>           skip SERVICE timer entries with number from comma separated list
          -O|--property key=value   define a config property
          --prefix <prefix> Prefix for read/write files (raw responses)
+         --pic	                   Print Internal Config (and stop)
 };
 	print "\n";
 };
@@ -298,12 +301,14 @@ my @modules;
 foreach my $service_module (@service_modules) {
 	push @modules, "inc/service-" . $service_module . ".pl";
 };
+
 foreach my $dvr_module (@dvr_modules) {
 	push @modules, "inc/dvr-" . $dvr_module . ".pl";
 };
-foreach my $system_module (@system_modules) {
-	push @modules, "inc/system-" . $system_module . ".pl";
-};
+
+#foreach my $system_module (@system_modules) {
+#	push @modules, "inc/system-" . $system_module . ".pl";
+#};
 
 # load modules if existing
 foreach my $module (@modules) {
@@ -318,29 +323,27 @@ foreach my $module (@modules) {
 # result
 logging("INFO", "list of supported SERVICEs: " . join(" ", @service_list_supported));
 logging("INFO", "list of supported DVRs    : " . join(" ", @dvr_list_supported));
-logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
+#logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
 
 ###############################################################################
 # Defaults (partially by autodetection)
 ###############################################################################
 
-$setup{'service'} = "tvinfo"; # default (only one supported so far)
+$setup{'service.default'} = "tvinfo"; # default (only one supported so far)
 
-$setup{'system'} = "";
-# Try to autodetect
-foreach my $system (@system_list_supported) {
-	if (defined $module_functions{'system'}->{$system}->{'autodetect'}) {
-		if ($module_functions{'system'}->{$system}->{'autodetect'}()) {
-			logging("INFO", "autodetected SYSTEM : " . $system);
-			$setup{'system'} = $system;
-			last;
-		};
-	};
-};
+# Try to autodetect SYSTEM
+#foreach my $system (@system_list_supported) {
+#	if (defined $module_functions{'system'}->{$system}->{'autodetect'}) {
+#		if ($module_functions{'system'}->{$system}->{'autodetect'}()) {
+#			logging("INFO", "autodetected SYSTEM : " . $system);
+#			$setup{'system'} = $system;
+#			last;
+#		};
+#	};
+#};
 
-$setup{'dvr'} = "";
-# Try to autodetect
-foreach my $dvr (@system_list_supported) {
+# Try to autodetect DVR
+foreach my $dvr (@dvr_list_supported) {
 	if (defined $module_functions{'dvr'}->{$dvr}->{'autodetect'}) {
 		if ($module_functions{'dvr'}->{$dvr}->{'autodetect'}()) {
 			logging("INFO", "autodetected DVR: " . $dvr);
@@ -362,7 +365,8 @@ my ($opt_read_service_from_file, $opt_read_dvr_from_file);
 my ($opt_write_service_to_file, $opt_write_dvr_to_file);
 my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
-my ($opt_print_config, $opt_config);
+my ($opt_print_properties, $opt_properties);
+my ($opt_print_internal_config);
 
 Getopt::Long::config('bundling');
 
@@ -371,23 +375,24 @@ my $options_result = GetOptions (
 	"v"		=> \$opt_v,
 	"S"		=> \$opt_S,
 
-	# config file
-	"config|rc=s"	=> \$opt_config,
+	# properties file
+	"properties|rc=s"	=> \$opt_properties,
+	"pp"			=> \$opt_print_properties,
 
 	# DVR
+	"dvr=s"		=> \$opt_dvr,
 	"d=s" 		=> \$opt_d,
 	"p=i"		=> \$opt_p,
 	"F|folder=s"	=> \$opt_F,
 	"K|sdt:s"	=> \$opt_K,
 
 	# SERVICE
+	"service=s"	=> \$opt_service,
 	"U=s"		=> \$opt_U,
 	"P=s"		=> \$opt_P,
 	"E|sst:s"	=> \$opt_E,
 
-	"service=s"	=> \$opt_service,
-	"system=s"	=> \$opt_system,
-	"dvr=s"		=> \$opt_dvr,
+	#"system=s"	=> \$opt_system,
 
 	# Channelmap
 	"c"		=> \$opt_c,
@@ -409,10 +414,10 @@ my $options_result = GetOptions (
 	"wstf"		=> \$opt_write_service_to_file,
 	"wdtf"		=> \$opt_write_dvr_to_file,
 	"prefix"	=> \$opt_prefix,
+	"pic"		=> \$opt_print_internal_config,
 
 	"O|property=s@"	=> \@opt_properties,
 	"h|help|\?"	=> \$opt_h,
-	"pc"		=> \$opt_print_config,
 );
 
 if ($options_result != 1) {
@@ -442,19 +447,19 @@ if (! -e $file_config) {
 	logging("INFO", "read configuration from file (OLD FORMAT): " . $file_config);
 
 	# map old options to new properties
-	$config{'service.' . $setup{'service'} . '.user'}     = $username if (defined $username);
-	$config{'service.' . $setup{'service'} . '.password'} = $password if (defined $password);
+	$config{'service.user'}     = $username if (defined $username);
+	$config{'service.password'} = $password if (defined $password);
 };
 
-if (defined $opt_config) {
-	if (! -e $opt_config) {
-		logging("ERROR", "given config file is not existing: " . $opt_config);
+if (defined $opt_properties) {
+	if (! -e $opt_properties) {
+		logging("ERROR", "given config file is not existing: " . $opt_properties);
 		exit 1;
 	};
 
-	logging("INFO", "try reading configuration from file: " . $opt_config);
-	if(!open(FILE, "<$opt_config")) {
-	logging("ERROR", "can't read configuration from file: " . $opt_config);
+	logging("INFO", "try reading configuration from file: " . $opt_properties);
+	if(!open(FILE, "<$opt_properties")) {
+	logging("ERROR", "can't read configuration from file: " . $opt_properties);
 		exit(1);
 	};
 
@@ -468,16 +473,32 @@ if (defined $opt_config) {
 			my ($key, $value) = ($1, $2);
 			logging("DEBUG", "read from config file: " . $key . "=" . $value);
 
-			if ($key =~ /^setup\.(.*)/o) {
-				$setup{$1} = $value;
+			if ($value eq "") {
+				$properties{$key} = undef;
 			} else {
-				$config{$key} = $value;
+				$properties{$key} = $value;
 			};
 		} else {
 			logging("WARN", "skip unparsable line in config file[" . $lc . "]: " . $_);
 		};
 	};
-	logging("INFO", "finished reading configuration from file: " . $opt_config);
+	logging("INFO", "finished reading configuration from file: " . $opt_properties);
+
+	# check for service_users
+	foreach my $entry (grep /^service\.tvinfo\.user\./o, keys %properties) {
+		#logging("DEBUG", $entry);
+		if ($entry =~ /^service\.tvinfo\.user\.([^.]+)\.password$/o) {
+			push @service_users, $1;
+		};
+	};
+
+	# check for dvr_hosts
+	foreach my $entry (grep /^dvr\.host\./o, keys %properties) {
+		#logging("DEBUG", $entry);
+		if ($entry =~ /^dvr\.host\.([^.]+)\.type$/o) {
+			push @dvr_hosts, $1;
+		};
+	};
 };
 
 
@@ -485,68 +506,85 @@ if (defined $opt_config) {
 # Options validation
 ###############################################################################
 
-## --service
-if (defined $opt_service) {
-	if (! grep(/^$opt_service$/, @service_list_supported)) {
-		print "ERROR : unsupported SERVICE: " . $opt_service . "\n";
-		exit 2;
-	};
-	$setup{'service'} = $opt_service;
-};
-
-## --dvr
-if (defined $opt_dvr) {
-	if (! grep(/^$opt_dvr$/, @dvr_list_supported)) {
-		print "ERROR : unsupported DVR: " . $opt_dvr . "\n";
-		exit 2;
-	};
-	$setup{'dvr'} = $opt_dvr;
-};
-
-## --system
-if (defined $opt_system) {
-	if (! grep(/^$opt_system$/, @system_list_supported)) {
-		print "ERROR : unsupported SYSTEM: " . $opt_system . "\n";
-		exit 2;
-	};
-	$setup{'system'} = $opt_system;
-};
-
 ## --property
 if (scalar (@opt_properties) > 0) {
 	foreach my $keyvalue (@opt_properties) {
 		my ($key, $value) = split("=", $keyvalue, 2);
 		if ((! defined $key) || (! defined $value)) {
-			print "ERROR : unsupported property: " . $keyvalue . "\n";
+			logging("ERROR", "unsupported property: " . $keyvalue);
 			exit 2;
 		};
 		$config{$key} = $value;
 	};
 };
 
+## --service
+if (defined $opt_service) {
+	if (! grep(/^$opt_service$/, @service_list_supported)) {
+		logging("ERROR", "unsupported SERVICE: " . $opt_service);
+		exit 2;
+	};
+	$setup{'service'} = $opt_service;
+} else {
+	$setup{'service'} = $setup{'service.default'};
+	logging("NOTICE", "autoselected SERVICE: " . $setup{'service'});
+};
+
+## --dvr
+if (defined $opt_dvr) {
+	if (! grep(/^$opt_dvr$/, @dvr_list_supported)) {
+		logging("ERROR", "unsupported DVR: " . $opt_dvr);
+		exit 2;
+	};
+	$setup{'dvr'} = $opt_dvr;
+};
+
+## --system
+#if (defined $opt_system) {
+#	if (! grep(/^$opt_system$/, @system_list_supported)) {
+#		print "ERROR : unsupported SYSTEM: " . $opt_system . "\n";
+#		exit 2;
+#	};
+#	$setup{'system'} = $opt_system;
+#};
+
 ## --host
 if (defined $opt_d) {
 	$config{'dvr.host'} = $opt_d;
+
+	# define property
+	if (defined $opt_dvr) {
+		$properties{"dvr.host." . $config{'dvr.host'} . ".type"} = $setup{'dvr'};
+	};
 };
+
 if (! defined $config{'dvr.host'}) {
-	$config{'dvr.host'} = "localhost";
+	my $info = "";
+	if (scalar(@dvr_hosts) > 0) {
+		$info = " - potential DVR hosts found in properties: " . join(" ", @dvr_hosts);
+	};
+	logging("ERROR", "DVR host not given (use -d)" .  $info);
+	exit 1;
 };
 
 ## --port
 if (defined $opt_p) {
 	if ($opt_p =~ /^[0-9]{3,5}$/o) {
 		$config{'dvr.port'} = $opt_p;
+
+		# define property
+		if (defined $opt_dvr) {
+			$properties{"dvr.host." . $config{'dvr.host'} . ".port"} = $config{'dvr.port'};
+		};
 	} else {
-		print "ERROR : unsupported port: " . $opt_p . "\n";
+		logging("ERROR", "unsupported port: " . $opt_p);
 		exit 2;
 	};
-};
-
-## --prefix
-if (defined $opt_prefix) {
-	$config{'dvr.source.file.prefix'} = $opt_prefix;
 } else {
-	$config{'dvr.source.file.prefix'} = "";
+	if (defined $properties{"dvr.host." . $config{'dvr.host'} . ".port"}) {
+		$config{'dvr.port'} = $properties{"dvr.host." . $config{'dvr.host'} . ".port"};
+		logging("INFO", "take port from properties: " . $config{'dvr.port'});
+	};
 };
 
 ## -F/--folder
@@ -568,6 +606,8 @@ if (defined $setupfile) {
 	exit 2;
 };
 
+# migration from config-ng.pl
+$properties{'service.default.proxy'} = $http_proxy if defined ($http_proxy);;
 
 ## debug: raw file read/write handling
 # -R is covering all
@@ -605,43 +645,56 @@ if (defined $opt_N) {
 
 ## SERVICE user handling
 if ($opt_U) {
-	$config{'service.' . $setup{'service'} . '.user'} = $opt_U;
+	$config{'service.user'} = $opt_U;
 };
 
-if (! defined $config{'service.' . $setup{'service'} . '.user'}) {
-	logging("ERROR", "SERVICE username not defined (use -U or specify in config file)");
+if (! defined $config{'service.user'}) {
+	my $info = "";
+	if (scalar(@service_users) > 0) {
+		$info = " potential users found in properties: " . join(" ", @service_users);
+	};
+	logging("ERROR", "SERVICE username not defined (use -U)" .  $info);
 	exit 1;
-} elsif ($config{'service.' . $setup{'service'} . '.user'} eq "<TODO>") {
-	logging("ERROR", "SERVICE username not explicitly given, still default: " . $config{'service.' . $setup{'service'} . '.user'});
+} elsif ($config{'service.user'} eq "<TODO>") {
+	logging("ERROR", "SERVICE username not explicitly given, still default: " . $config{'service.user'});
 	exit 1;
 };
 
 ## SERVICE password handling
 if ($opt_P) {
-	$config{'service.' . $setup{'service'} . '.password'} = $opt_P;
+	$config{'service.password'} = $opt_P;
+};
+
+if (defined $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"}) {
+	$config{'service.password'} = $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"};
+	logging("DEBUG", "found SERVICE password for username in properties: " . $config{'service.password'});
 };
 
 if ($config{'service.source.type'} ne "file") {
-	if (! defined $config{'service.' . $setup{'service'} . '.password'}) {
-		if (! defined $password) {
-			logging("ERROR", "SERVICE password not defined (use -P or specify in config flie)");
-			exit 1;
-		};
-	} elsif ($config{'service.' . $setup{'service'} . '.password'} eq "<TODO>") {
-		logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.' . $setup{'service'} . '.password'});
+	if ((! defined $config{'service.password'}) || ($config{'service.password'} eq "")) {
+		logging("ERROR", "SERVICE password not defined (use -P or specify in properties file for user: ". $config{'service.user'} . ")");
+		exit 1;
+	} elsif ($config{'service.password'} eq "<TODO>") {
+		logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.password'});
 		exit 1;
 	};
 
 	if ($setup{'service'} eq "tvinfo") {
 		# TODO: move such option checks in service module
-		if ($config{'service.' . $setup{'service'} . '.password'} !~ /^{MD5}/) {
+		if ($config{'service.password'} !~ /^{MD5}/) {
 			logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
 		};
 	};
 };
 
+## --prefix
 # defaults for read/write raw files
-$config{'service.source.file.prefix'}  = $setup{'service'} . "-" . $config{'service.' . $setup{'service'} . '.user'};
+$config{'service.source.file.prefix'}  = "service-" . $setup{'service'} . "-" . $config{'service.user'};
+$config{'dvr.source.file.prefix'} = "dvrhost-" . $config{'dvr.host'};
+if (defined $opt_prefix) {
+	$config{'dvr.source.file.prefix'} = $opt_prefix . "-" . $config{'dvr.source.file.prefix'};
+	$config{'service.source.file.prefix'} = $opt_prefix. "-" . $config{'service.source.file.prefix'};
+};
 
 if (! defined $config{'dvr.host'}) {
 	logging("ERROR : DVR host not specified (and unable to autodetect)");
@@ -661,6 +714,23 @@ if (defined $opt_C) {
 	};
 };
 
+## Final checks
+if (! defined $setup{'dvr'}) {
+	if (defined $properties{"dvr.host." . $config{'dvr.host'} . ".type"}) {
+		$setup{'dvr'} = $properties{"dvr.host." . $config{'dvr.host'} . ".type"};
+		logging("INFO", "take type of DVR from properties: " . $setup{'dvr'} . " (DVR host: " . $config{'dvr.host'} . ")");
+	} else {
+		logging("ERROR", "DVR not autodeteced and not specified (--dvr): " . join(" ", @dvr_list_supported));
+		exit 2;
+	};
+};
+
+#if (! defined $setup{'system'}) {
+#	logging("ERROR", "SYSTEM not autodeteced and not specified (--system): " . join(" ", @system_list_supported));
+#	exit 2;
+#};
+
+
 ###############################################################################
 # Reading external values
 ###############################################################################
@@ -679,22 +749,39 @@ if (! defined $config{"dvr.margin.stop"}) {
 
 
 ###############################################################################
-# Print configuration
+# Print Properties / internal configuration
 ###############################################################################
-if (defined $opt_print_config) {
-	logging("NOTICE", "print of configuration begin");
+if (defined $opt_print_properties) {
+	logging("NOTICE", "print of properties (configuration) begin");
 	print "# $progname/$progversion configuration\n";
 	print "#  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
 
-	for my $setup_property (sort keys %setup) {
-		printf "setup.%s=%s\n", $setup_property, $setup{$setup_property};
+	for my $property (sort keys %properties) {
+		my $value = $properties{$property};
+		$value = "" if (! defined $properties{$property});
+		printf "%s=%s\n", $property, $value;
 	};
 
-	for my $property (sort keys %config) {
-		printf "%s=%s\n", $property, $config{$property};
+	logging("NOTICE", "print of properties (configuration) end");
+};
+
+if (defined $opt_print_internal_config) {
+	logging("NOTICE", "print of internal config begin");
+
+	for my $key (sort keys %setup) {
+		printf "#SETUP.%s=%s\n", $key, $setup{$key};
 	};
 
-	logging("NOTICE", "print of configuration end");
+	for my $key (sort keys %config) {
+		my $value = $config{$key};
+		$value = "" if (! defined $config{$key});
+		printf "#CONFIG.%s=%s\n", $key, $value;
+	};
+
+	logging("NOTICE", "print of internal config end");
+};
+
+if ((defined $opt_print_properties) || (defined $opt_print_internal_config)) {
 	exit(0);
 };
 
@@ -1248,7 +1335,7 @@ if (scalar(keys %s_timers_action) > 0) {
 			my %d_timer = %{ thaw($serialized) };
 
 			# add folder
-			$d_timer{'dvr_data'} = $config{'service.' . $setup{'service'} .'.user'} . ":folder:" . $config{'dvr.folder'};
+			$d_timer{'dvr_data'} = $config{'service.user'} . ":folder:" . $config{'dvr.folder'};
 
 			# change channel ID from SERVICE to DVR
 			$d_timer{'cid'} = $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'};
