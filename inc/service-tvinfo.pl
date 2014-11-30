@@ -55,6 +55,15 @@ my %tvinfo_channel_id_by_name;
 
 
 
+################################################################################
+################################################################################
+# Helper functions
+################################################################################
+## convert password
+sub service_tvinfo_convert_password($) {
+	return("{MD5}" . md5_hex($_[0]));
+};
+
 ## replace tokens in request
 sub request_replace_tokens($) {
 	my $request = shift || return 1;
@@ -172,7 +181,7 @@ sub service_tvinfo_get_channels($$;$) {
 		print "#### TVINFO/stations XML NATIVE RESPONSE END   ####\n";
 	};
 
-	if ($xml_raw =~ /encoding="UTF-8"/) {
+	if ($xml_raw =~ /encoding="UTF-8"/o) {
 		$xml_raw = encode("utf-8", $xml_raw);
 	};
 
@@ -236,10 +245,16 @@ sub service_tvinfo_get_channels($$;$) {
 		$tvinfo_channel_name_by_id{$id} = $name;
 		$tvinfo_channel_id_by_name{$name} = $id;
 
+		if ((defined $ENV{'LANG'}) && ($ENV{'LANG'} =~ /utf8/o)) {
+			# recode
+			$name = encode("iso-8859-1", decode("utf8", $name));
+			$altnames = encode("iso-8859-1", decode("utf8", $altnames));
+		};
+
 		push @$channels_ap, {
 			'cid'      => $id,
-			'name'     => encode("iso-8859-1", decode("utf8", $name)),
-			'altnames' => encode("iso-8859-1", decode("utf8", $altnames)),
+			'name'     => $name,
+			'altnames' => $altnames,
 			'enabled'  => $selected,
 		};
 	};

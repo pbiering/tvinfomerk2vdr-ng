@@ -40,6 +40,7 @@ our %config;
 our  @dvr_list_supported;
 push @dvr_list_supported, "tvheadend";
 our %module_functions;
+$module_functions{'dvr'}->{'tvheadend'}->{'autodetect'} = \&dvr_tvheadend_autodetect;
 $module_functions{'dvr'}->{'tvheadend'}->{'init'} = \&dvr_tvheadend_init;
 $module_functions{'dvr'}->{'tvheadend'}->{'get_channels'} = \&dvr_tvheadend_get_channels;
 $module_functions{'dvr'}->{'tvheadend'}->{'get_timers'} = \&dvr_tvheadend_get_timers;
@@ -60,15 +61,26 @@ my %priority_mapping = (
 	99 => 'Important'
 );
 
+################################################################################
+# autodetect DVR
+################################################################################
+sub dvr_tvheadend_autodetect() {
+	if (
+	    -e "/storage/.config/system.d/service.multimedia.tvheadend.service" # openelec
+
+	) {
+		return 1;
+	};
+
+	return 0;
+};
+
 
 ################################################################################
 ################################################################################
 # initialize values from DVR
 ################################################################################
 sub dvr_tvheadend_init() {
-	# TODO: retrieve global default margins (tvheadend has margins per config)
-	my ($MarginStart, $MarginStop);
-
 	# destination port
 	$port = 9981; # default
 	if (defined $config{'dvr.port'}) {
@@ -77,6 +89,7 @@ sub dvr_tvheadend_init() {
 
 	return 1;
 };
+
 
 ################################################################################
 ################################################################################
@@ -199,7 +212,11 @@ sub dvr_tvheadend_get_timers($) {
 		if ($config{'dvr.source.type'} eq "file") {
 			$config_source_url = "file://" . $config_file;
 		} else {
-			$config_source_url = "http://" . $config{'dvr.host'} . ":" . $port . "/dvr?op=loadSettings&config_name=" . $$configname_hp{'identifier'};
+			$config_source_url = "http://" . $config{'dvr.host'} . ":" . $port . "/dvr?op=loadSettings";
+			if ($$configname_hp{'identifier'} ne "default") {
+				$config_source_url .= "&config_name=" . $$configname_hp{'identifier'};
+			};
+
 			if ($config{'dvr.source.type'} eq "network+store") {
 				$file = $config_file;
 			};

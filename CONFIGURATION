@@ -5,6 +5,66 @@ Prerequisites:
 --------------
 	TVinfo credentials: username / password
 
+
 Channel Alignment:
 ------------------
-# perl ./tvinfomerk2vdr-ng.pl -U <username> -P <password> --scs
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scs
+
+If channels (aka stations or "Meine Sender") are proper configured, following result should be shown as last line:
+
+  NOTICE: SERVICE: no channel candidates found to enable - looks like all possible channels are configured
+
+
+Notes:
+- in case of autodetection is not working, try to use --dvr vdr|tvheadend
+- in case of DVR is not local installed, use -d <DVR host>
+
+
+Dry-run of syncing timers (aka schedules or "Merkliste"):
+---------------------------------------------------------
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -N
+   optional use -F <folder> for specifying a sub-folder for the recordings
+
+This should write DVR actions to a file, e.g.
+  DVR=tvheadend:
+	dvrhost-localhost-timers-actions.http
+  DVR=vdr
+	dvrhost-localhost-timers-actions.svdrp
+
+Check this command file
+
+
+Real run of syncing timers (aka schedules or "Merkliste"):
+---------------------------------------------------------
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password>
+   optional use -F <folder> for specifying a sub-folder for the recordings
+
+On last lines on any executed action following should be shown:
+
+e.g.
+    INFO  : HTSP: summary timers del=1 add=1 config=1
+
+If e.g. following is shwon, check messages on NOTICE|WARN level for reason:
+    WARN  : timers skipped: 1
+
+
+Store configuration into default properties file:
+-----------------------------------------
+$ mv tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -F <folder> --pp >tvinfomerk2vdr-ng.properties
+
+
+Run again using default properties file:
+----------------------------------------
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username>
+
+Everything should run fine, no DVR actions should occur (because of the first real-run)
+
+
+Run again using default properties file and syslog output:
+----------------------------------------------------------
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -L
+
+Output messages should appear now in syslog
+- reelbox: TODO
+- openelec: only remote syslog after creating a remote log forwarder

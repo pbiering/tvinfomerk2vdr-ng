@@ -38,6 +38,9 @@ use strict;
 use warnings; 
 use utf8;
 
+use File::Basename;
+use Getopt::Long;
+
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
@@ -96,16 +99,17 @@ our $progversion = "1.0.0";
 #
 # Initialization
 #
-my $file_config = "config-ng.pl";
 
-push (@INC, "./");
+our $dirname = dirname($0);
 
+my $file_config = $dirname . "/config-ng.pl"; # old
+my $file_properties = $dirname . "/tvinfomerk2vdr-ng.properties";
+
+push (@INC, $dirname);
 require ("inc/logging.pl");
 require ("inc/support-dvr.pl");
 require ("inc/support-channels.pl");
 require ("inc/support-channelmap.pl");
-
-use Getopt::Long;
 
 my $result;
 
@@ -260,7 +264,8 @@ Options:
          -S                        show summary to stdout in case of any changes or log messages > notice
          -h	                   Show this help text
          --pp	                   Print Properties (and stop)
-         --properties|rp <FILE>    Read Properties from FILE
+         --properties|rp <FILE>    Read Properties from FILE (default: $file_properties)
+         --srp                     Skip Read Properties from FILE
 
 Service related
          --service <name>          define SERVICE name
@@ -331,18 +336,13 @@ foreach my $dvr_module (@dvr_modules) {
 
 # load modules if existing
 foreach my $module (@modules) {
-	if (-e $module) {
+	if (-e $dirname . "/" . $module) {
 		require($module);
 		logging("DEBUG", "load module: " . $module);
 	} else {
 		logging("WARN", "module not existing: " . $module);
 	};
 };
-
-# result
-logging("INFO", "list of supported SERVICEs: " . join(" ", @service_list_supported));
-logging("INFO", "list of supported DVRs    : " . join(" ", @dvr_list_supported));
-#logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
 
 ###############################################################################
 # Defaults (partially by autodetection)
@@ -361,18 +361,6 @@ $setup{'service.default'} = "tvinfo"; # default (only one supported so far)
 #	};
 #};
 
-# Try to autodetect DVR
-foreach my $dvr (@dvr_list_supported) {
-	if (defined $module_functions{'dvr'}->{$dvr}->{'autodetect'}) {
-		if ($module_functions{'dvr'}->{$dvr}->{'autodetect'}()) {
-			logging("INFO", "autodetected DVR: " . $dvr);
-			$setup{'dvr'} = $dvr;
-			$config{'dvr.host'} = "localhost";
-			last;
-		};
-	};
-};
-
 $username = "" if (! defined $username);
 $password = "" if (! defined $password);
 
@@ -384,7 +372,7 @@ my ($opt_read_service_from_file, $opt_read_dvr_from_file);
 my ($opt_write_service_to_file, $opt_write_dvr_to_file);
 my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
-my ($opt_print_properties, $opt_properties);
+my ($opt_print_properties, $opt_properties, $opt_skip_read_properties);
 my ($opt_print_internal_config);
 
 Getopt::Long::config('bundling');
@@ -397,6 +385,7 @@ my $options_result = GetOptions (
 	# properties file
 	"properties|rp=s"	=> \$opt_properties,
 	"pp"			=> \$opt_print_properties,
+	"srp"			=> \$opt_skip_read_properties,
 
 	# DVR
 	"dvr=s"		=> \$opt_dvr,
@@ -455,6 +444,30 @@ $debug = 1 if $opt_D;
 
 
 ###############################################################################
+# Basic information
+###############################################################################
+logging("DEBUG", "list of supported SERVICEs: " . join(" ", @service_list_supported));
+logging("DEBUG", "list of supported DVRs    : " . join(" ", @dvr_list_supported));
+#logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
+
+###############################################################################
+# Autodetection
+###############################################################################
+# Try to autodetect DVR
+logging("DEBUG", "try to autodetect DVR from list: " . join(" ", @dvr_list_supported));
+foreach my $dvr (@dvr_list_supported) {
+	if (defined $module_functions{'dvr'}->{$dvr}->{'autodetect'}) {
+		logging("DEBUG", "try to autodetect DVR: " . $dvr);
+		if ($module_functions{'dvr'}->{$dvr}->{'autodetect'}()) {
+			logging("NOTICE", "autodetected DVR: " . $dvr);
+			$setup{'dvr'} = $dvr;
+			$config{'dvr.host'} = "localhost";
+			last;
+		};
+	};
+};
+
+###############################################################################
 # Read configuration from file
 ###############################################################################
 
@@ -475,47 +488,58 @@ if (defined $opt_properties) {
 		logging("ERROR", "given config file is not existing: " . $opt_properties);
 		exit 1;
 	};
+	$file_properties = $opt_properties;
+} elsif (! -e $file_properties) {
+	logging("NOTICE", "default properties file is not existing: " . $file_properties);
+	$file_properties = undef;
+};
 
-	logging("INFO", "try reading configuration from file: " . $opt_properties);
-	if(!open(FILE, "<$opt_properties")) {
-	logging("ERROR", "can't read configuration from file: " . $opt_properties);
-		exit(1);
-	};
+if (defined $file_properties) {
+	if (defined $opt_skip_read_properties) {
+		logging("NOTICE", "read of properties file is disabled by option");
+	} else {
+		logging("INFO", "try reading configuration from file: " . $file_properties);
+		if(!open(FILE, "<$file_properties")) {
+		logging("ERROR", "can't read configuration from file: " . $file_properties);
+			exit(1);
+		};
 
-	my $lc = 0;
-	while(<FILE>) {
-		$lc++;
-		chomp($_);
-		next if ($_ =~ /^#/o); # skip comments
+		my $lc = 0;
+		while(<FILE>) {
+			$lc++;
+			chomp($_);
+			next if ($_ =~ /^#/o); # skip comments
+			next if ($_ =~ /^$/o); # skip empty lines
 
-		if ($_ =~ /^\s*([^\s]+)\s*=\s*([^\s]*)\s*$/o) {
-			my ($key, $value) = ($1, $2);
-			logging("DEBUG", "read from config file: " . $key . "=" . $value);
+			if ($_ =~ /^\s*([^\s]+)\s*=\s*([^\s]*)\s*$/o) {
+				my ($key, $value) = ($1, $2);
+				logging("DEBUG", "read from config file: " . $key . "=" . $value);
 
-			if ($value eq "") {
-				$properties{$key} = undef;
+				if ($value eq "") {
+					$properties{$key} = undef;
+				} else {
+					$properties{$key} = $value;
+				};
 			} else {
-				$properties{$key} = $value;
+				logging("WARN", "skip unparsable line in config file[" . $lc . "]: " . $_);
 			};
-		} else {
-			logging("WARN", "skip unparsable line in config file[" . $lc . "]: " . $_);
 		};
-	};
-	logging("INFO", "finished reading configuration from file: " . $opt_properties);
+		logging("INFO", "finished reading configuration from file: " . $file_properties);
 
-	# check for service_users
-	foreach my $entry (grep /^service\.tvinfo\.user\./o, keys %properties) {
-		#logging("DEBUG", $entry);
-		if ($entry =~ /^service\.tvinfo\.user\.([^.]+)\.password$/o) {
-			push @service_users, $1;
+		# check for service_users
+		foreach my $entry (grep /^service\.tvinfo\.user\./o, keys %properties) {
+			#logging("DEBUG", $entry);
+			if ($entry =~ /^service\.tvinfo\.user\.([^.]+)\.password$/o) {
+				push @service_users, $1;
+			};
 		};
-	};
 
-	# check for dvr_hosts
-	foreach my $entry (grep /^dvr\.host\./o, keys %properties) {
-		#logging("DEBUG", $entry);
-		if ($entry =~ /^dvr\.host\.([^.]+)\.type$/o) {
-			push @dvr_hosts, $1;
+		# check for dvr_hosts
+		foreach my $entry (grep /^dvr\.host\./o, keys %properties) {
+			#logging("DEBUG", $entry);
+			if ($entry =~ /^dvr\.host\.([^.]+)\.type$/o) {
+				push @dvr_hosts, $1;
+			};
 		};
 	};
 };
@@ -700,6 +724,7 @@ if ($config{'service.source.type'} ne "file") {
 		# TODO: move such option checks in service module
 		if ($config{'service.password'} !~ /^{MD5}/) {
 			logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
+			$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
 		};
 	};
 };
@@ -707,7 +732,7 @@ if ($config{'service.source.type'} ne "file") {
 # fill user/pass into properties
 if ((defined $opt_U) && (defined $opt_P) &&
     (! defined $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"})) {
-	$properties{'service.' . $setup{'service'} . ".user." . $opt_U . ".password"} = $opt_P;
+	$properties{'service.' . $setup{'service'} . ".user." . $opt_U . ".password"} = $config{'service.password'};
 };
 
 
@@ -727,8 +752,8 @@ if (defined $opt_F) {
 
 ## --prefix
 # defaults for read/write raw files
-$config{'service.source.file.prefix'}  = "service-" . $setup{'service'} . "-" . $config{'service.user'};
-$config{'dvr.source.file.prefix'} = "dvrhost-" . $config{'dvr.host'};
+$config{'service.source.file.prefix'}  = $dirname . "/" . "service-" . $setup{'service'} . "-" . $config{'service.user'};
+$config{'dvr.source.file.prefix'} = $dirname . "/" . "dvrhost-" . $config{'dvr.host'};
 if (defined $opt_prefix) {
 	$config{'dvr.source.file.prefix'} = $opt_prefix . "-" . $config{'dvr.source.file.prefix'};
 	$config{'service.source.file.prefix'} = $opt_prefix. "-" . $config{'service.source.file.prefix'};

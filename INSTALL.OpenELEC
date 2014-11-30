@@ -9,10 +9,7 @@ Prerequisites
 
 Installation
 ------------
-- create destination directory
-	mkdir /storage/tvinfomerk2vdr-ng
-
-- unpack
+- unpack (this automatically creates the subdirectory)
 	unzip -d /storage /tmp/tvinfomerk2vdr-ng.zip
 
 
