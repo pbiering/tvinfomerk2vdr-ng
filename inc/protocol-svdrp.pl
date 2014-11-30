@@ -26,6 +26,7 @@ use Data::Dumper;
 use POSIX qw(strftime);
 use IO::Socket::INET;
 use HTTP::Date;
+use Date::Calc qw(Add_Delta_Days);
 
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
@@ -304,19 +305,26 @@ sub protocol_svdrp_get_timers($$;$) {
 		my ($id, $temp) = split(/ /, $line, 2);
 		my ($tmstatus, $vdr_id, $dor, $start, $stop, $prio, $lft, $title, $summary) = split(/\:/, $temp, 9);
 
+		if ($dor !~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o) {
+			die "unsupported day format: " . $dor;
+		};
+
 		# convert dor,start,end to unixtime
-		my $start_ut = str2time($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2));
+		my $start_ut = str2time($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2) . ":00");
 		#my $start_ut = UnixDate(ParseDate($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2)), "%s");
 
 		my $stop_ut;
 
 		if ($stop > $start) {
-			$stop_ut  = str2time($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2));
+			$stop_ut  = str2time($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2) . ":00");
 			#$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		} else {
 			# shift to next day but same hh:mm
-			my $dor_stop = strftime("%Y%m%d", localtime(UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s") + 23*60*60)); # add 23 hours to catch DST
-			$stop_ut  = str2time($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2));
+			$dor !~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o;
+
+			my ($year,$month,$day) = Add_Delta_Days($1, $2, $3, 1);
+			my $dor_stop = sprintf("%4d%02d%02d", $year, $month, $day);
+			$stop_ut  = str2time($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2) . ":00");
 			#$stop_ut  = UnixDate(ParseDate($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		};
 
@@ -327,7 +335,7 @@ sub protocol_svdrp_get_timers($$;$) {
 			. " start="        . $start . " (" . strftime("%Y%m%d-%H%M", localtime($start_ut)) . ")"
 			. " end="          . $stop  . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
 			. " prio="  	   . $prio
-			. " lft="	   . $lifetime
+			. " lft="	   . $lft
 			. " title='"       . $title . "'"
 			. " summary='"     . $summary . "'"
 		);
@@ -338,7 +346,7 @@ sub protocol_svdrp_get_timers($$;$) {
 			'start_ut'     => $start_ut,
 			'stop_ut'      => $stop_ut,
 			'priority'     => $prio,
-			'lifetime'     => $lifetime,
+			'lifetime'     => $lft,
 			'title'        => $title,
 			'summary'      => $summary,
 		};
@@ -461,8 +469,6 @@ package SVDRP;
 
 my ($Dest, $Port);
 
-sub CRLF       () { main::CRLF(); };
-
 my($SOCKET, $EPGSOCKET, $query, $connected);
 
 sub new {
@@ -511,7 +517,7 @@ sub command {
 		myconnect($this);
 	}
 	
-	$cmd = $cmd . CRLF;
+	$cmd = $cmd . "\n\r";
 	if($SOCKET) {
 		use bytes;
 		my $result = send($SOCKET, $cmd, 0);

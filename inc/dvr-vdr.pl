@@ -38,6 +38,7 @@ our %config;
 our  @dvr_list_supported;
 push @dvr_list_supported, "vdr";
 our %module_functions;
+$module_functions{'dvr'}->{'vdr'}->{'autodetect'} = \&dvr_vdr_autodetect;
 $module_functions{'dvr'}->{'vdr'}->{'init'} = \&dvr_vdr_init;
 $module_functions{'dvr'}->{'vdr'}->{'get_channels'} = \&dvr_vdr_get_channels;
 $module_functions{'dvr'}->{'vdr'}->{'get_timers'} = \&dvr_vdr_get_timers;
@@ -46,6 +47,22 @@ $module_functions{'dvr'}->{'vdr'}->{'create_update_delete_timers'} = \&dvr_vdr_c
 ## defaults
 $config{"dvr.vdr.file.setup"} = "/etc/vdr/setup.conf";
 my $port;
+
+
+################################################################################
+# autodetect DVR
+################################################################################
+sub dvr_vdr_autodetect() {
+	if (
+	    -d "/etc/vdr" # vdr
+
+	) {
+		return 1;
+	};
+
+	return 0;
+};
+
 
 ################################################################################
 ################################################################################
@@ -289,7 +306,7 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 
 	## run through timers actions
 	foreach my $d_timer_num (sort { $a <=> $b } keys %$d_timers_action_hp) {
-		my $action = (keys($$d_timers_action_hp{$d_timer_num}))[0];
+		my $action = (keys(%{$$d_timers_action_hp{$d_timer_num}}))[0];
 		#logging("INFO", "VDR-ACTION: tid=" . $d_timer_num . " action=" . $action);
 		if ($action eq "delete") {
 			push @d_timers_delete, $d_timer_num;
@@ -304,7 +321,7 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 			my %timer_new = %{ thaw($serialized) };
 
 			# modify copied timer
-			foreach my $key (keys $$d_timers_action_hp{$d_timer_num}->{'modify'}) {
+			foreach my $key (keys %{$$d_timers_action_hp{$d_timer_num}->{'modify'}}) {
 				$timer_new{$key} = $$d_timers_action_hp{$d_timer_num}->{'modify'}->{$key};
 			};
 

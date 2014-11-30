@@ -23,8 +23,6 @@ use utf8;
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
-use v5.16;
-
 require("inc/protocol-htsp.pl");
 
 ## debug/trace information
@@ -100,8 +98,6 @@ sub dvr_tvheadend_get_channels($) {
 	my $channels_ap = $_[0];
 
 	my @adapters;
-
-	#print "DEBUG : " . $0 . __FILE__ . (caller(0))[3];
 
 	my $channels_source_url;
 	my $adapters_source_url;
@@ -350,7 +346,7 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 
 	## run through timers actions
 	foreach my $d_timer_num (sort { $a <=> $b } keys %$d_timers_action_hp) {
-		my $action = (keys($$d_timers_action_hp{$d_timer_num}))[0];
+		my $action = (keys(%{$$d_timers_action_hp{$d_timer_num}}))[0];
 		logging("INFO", "TVHEADEND: ACTION tid=" . $d_timer_num . " action=" . $action);
 		if ($action eq "delete") {
 			push @d_timers_delete, $d_timer_num;
@@ -365,7 +361,7 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 			my %timer_new = %{ thaw($serialized) };
 
 			# modify copied timer
-			foreach my $key (keys $$d_timers_action_hp{$d_timer_num}->{'modify'}) {
+			foreach my $key (keys %{$$d_timers_action_hp{$d_timer_num}->{'modify'}}) {
 				$timer_new{$key} = $$d_timers_action_hp{$d_timer_num}->{'modify'}->{$key};
 			};
 

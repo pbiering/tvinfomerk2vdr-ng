@@ -473,7 +473,7 @@ foreach my $dvr (@dvr_list_supported) {
 
 logging("INFO", "try reading configuration from file (OLD FORMAT): " . $file_config);
 if (! -e $file_config) {
-	logging("NOTICE", "given config file is not existing: " . $file_config);
+	logging("NOTICE", "given config file (OLD FORMAT) is not existing: " . $file_config);
 } else {
 	require ($file_config) || die;
 	logging("INFO", "read configuration from file (OLD FORMAT): " . $file_config);
@@ -641,8 +641,7 @@ if (defined $opt_p) {
 
 ## map old config-ng.pl values to new structure
 if (defined $setupfile) {
-	print "ERROR : parameter 'setupfile' in config-ng.pl is no longer supported\n";
-	exit 2;
+	logging("WARN", "parameter 'setupfile' in config-ng.pl is no longer supported");
 };
 
 # migration from config-ng.pl
@@ -1151,7 +1150,7 @@ foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timer
 		. " tid="    . sprintf("%-2d", $d_timer_num)
 		. " cid="    . sprintf("%-3d",$$d_timer_hp{'cid'})
 		. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
-		. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+		. " stop="   . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'stop_ut'}))
 		. " title='" . $$d_timer_hp{'title'} . "'"
 		. " cname='" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . "'"
 		. " s_d="    . $$d_timer_hp{'service_data'}
@@ -1178,6 +1177,7 @@ foreach my $s_timer_num (@s_timers_num) {
 
 	logging("DEBUG", "SERVICE/DVR: possible new timer tid=" . $s_timer_num . ":"
 		. " s_cid="  . $$s_timer_hp{'cid'}
+		. " d_cid="  . $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'} 
 		. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
 		. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 		. " title='" . $$s_timer_hp{'title'} . "'"
@@ -1190,8 +1190,8 @@ foreach my $s_timer_num (@s_timers_num) {
 
 		logging("TRACE", "MATCH: Check against existing timer #$d_timer_num:"
 			. " d_cid="        . $$d_timer_hp{'cid'} 
-			. " start="        . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
-			. " stop="         . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " start="        . strftime("%Y%m%d-%H%M%S", localtime($$d_timer_hp{'start_ut'}))
+			. " stop="         . strftime("%Y%m%d-%H%M%S", localtime($$d_timer_hp{'stop_ut'}))
 			. " title='"       . $$d_timer_hp{'title'} . "'"
 			. " service_data=" . $$d_timer_hp{'service_data'}
 		);
@@ -1414,7 +1414,7 @@ if (scalar(keys %d_timers_action) > 0) {
 
 		logging("INFO", "DVR-ACTION:"
 			. " tid=" . $d_timer_num
-			. " action=" . (keys($d_timers_action{$d_timer_num}))[0]
+			. " action=" . (keys(%{$d_timers_action{$d_timer_num}}))[0]
 			. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
 			. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
 			. " cid="  . $$d_timer_hp{'cid'} . "(" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . ")"
