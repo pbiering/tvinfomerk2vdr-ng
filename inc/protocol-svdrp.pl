@@ -25,6 +25,7 @@ use utf8;
 use Data::Dumper;
 use POSIX qw(strftime);
 use IO::Socket::INET;
+use HTTP::Date;
 
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
@@ -304,16 +305,19 @@ sub protocol_svdrp_get_timers($$;$) {
 		my ($tmstatus, $vdr_id, $dor, $start, $stop, $prio, $lft, $title, $summary) = split(/\:/, $temp, 9);
 
 		# convert dor,start,end to unixtime
-		my $start_ut = UnixDate(ParseDate($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2)), "%s");
+		my $start_ut = str2time($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2));
+		#my $start_ut = UnixDate(ParseDate($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2)), "%s");
 
 		my $stop_ut;
 
 		if ($stop > $start) {
-			$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
+			$stop_ut  = str2time($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2));
+			#$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		} else {
 			# shift to next day but same hh:mm
 			my $dor_stop = strftime("%Y%m%d", localtime(UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s") + 23*60*60)); # add 23 hours to catch DST
-			$stop_ut  = UnixDate(ParseDate($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
+			$stop_ut  = str2time($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2));
+			#$stop_ut  = UnixDate(ParseDate($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		};
 
 		logging("DEBUG", "SVDRP: found timer"
@@ -322,6 +326,8 @@ sub protocol_svdrp_get_timers($$;$) {
 			. " date="         . $dor
 			. " start="        . $start . " (" . strftime("%Y%m%d-%H%M", localtime($start_ut)) . ")"
 			. " end="          . $stop  . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
+			. " prio="  	   . $prio
+			. " lft="	   . $lifetime
 			. " title='"       . $title . "'"
 			. " summary='"     . $summary . "'"
 		);
@@ -331,6 +337,8 @@ sub protocol_svdrp_get_timers($$;$) {
 			'cid'          => $vdr_id,
 			'start_ut'     => $start_ut,
 			'stop_ut'      => $stop_ut,
+			'priority'     => $prio,
+			'lifetime'     => $lifetime,
 			'title'        => $title,
 			'summary'      => $summary,
 		};
@@ -344,12 +352,11 @@ sub protocol_svdrp_get_timers($$;$) {
 ################################################################################
 ################################################################################
 # delete timer via SVDRP
-# arg1: point to array of timer numbers to delete
-# arg2: point to array of timer pointers to add
-# arg3: URL of destination of actions
-#        
+#  arg1: point to array of timer numbers to delete
+#  arg2: point to array of timer pointers to add
+#  arg3: URL of destination of actions
 ################################################################################
-sub protocol_svdrp_delete_add_timers($$) {
+sub protocol_svdrp_delete_add_timers($$;$) {
 	my $timers_num_delete_ap = $_[0];
 	my $timers_add_ap = $_[1];
 	my $timers_destination_url = $_[2];
@@ -381,8 +388,8 @@ sub protocol_svdrp_delete_add_timers($$) {
 			. ":" . strftime("%Y-%m-%d", localtime($$timer_hp{'start_ut'}))
 			. ":" . strftime("%H%M", localtime($$timer_hp{'start_ut'}))
 			. ":" . strftime("%H%M", localtime($$timer_hp{'stop_ut'}))
-			. ":" . $prio
-			. ":" . $lifetime
+			. ":" . $$timer_hp{'priority'}
+			. ":" . $$timer_hp{'lifetime'}
 			. ":" . $$timer_hp{'title'}
 			. ":" . $$timer_hp{'summary'};
 		$counters{'add'}++ if ($destination eq "file");

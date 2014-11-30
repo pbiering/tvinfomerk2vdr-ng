@@ -51,6 +51,15 @@ my %tvheadend_configs;
 
 my $port;
 
+## TVHeadend mappings
+my %priority_mapping = (
+	19 => 'Unimportant',
+	39 => 'Low',
+	59 => 'Normal',
+	79 => 'High',
+	99 => 'Important'
+);
+
 
 ################################################################################
 ################################################################################
@@ -357,9 +366,31 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 		push @d_timers_new, $timer_hp;
 	};
 
+	## run through new timers and retrieve maximum lifetime
+	my $lifetime_max = 0;
+	foreach my $timer_hp (@d_timers_new) {
+		if ($$timer_hp{'lifetime'} > $lifetime_max) {
+			$lifetime_max = $$timer_hp{'lifetime'};
+		};
+	};
+
 	## run through new timers and adjust/extend informations
 	foreach my $timer_hp (@d_timers_new) {
 		$$timer_hp{'config'} = $$timer_hp{'service_data'};
+
+		# map priority 0-99 to names
+		my $priority_new = "";
+		foreach my $limit (sort { $a <=> $b } keys %priority_mapping) {
+			if ($$timer_hp{'priority'} <= $limit) {
+				$priority_new = $priority_mapping{$limit};
+				last;
+			};
+		};
+		if ($priority_new ne "") {
+			$$timer_hp{'priority'} = $priority_new;
+		} else {
+			die "ERROR during priority mapping - FIX CODE";
+		};
 
 		my $folder = dvr_create_foldername_from_timer_data($timer_hp, "tvheadend");
 		$folder = "" if ($folder eq "."); # clear non-empty folder
@@ -369,16 +400,19 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 
 		if (! defined $tvheadend_configs{$$timer_hp{'config'}}) {
 			$flag_create_adjust_config = "default";
-			logging("INFO", "TVHEADEND: config missing - need to create a new one: " . $$timer_hp{'config'});
+			logging("INFO", "TVHEADEND: config missing - need to create a new one" . $$timer_hp{'config'});
 		} else {
-			if (	$tvheadend_configs{$$timer_hp{'config'}}->{'preExtraTime'}  != $config{"dvr.margin.start"}
-			    ||	$tvheadend_configs{$$timer_hp{'config'}}->{'postExtraTime'} != $config{"dvr.margin.stop"}
+			if (	($tvheadend_configs{$$timer_hp{'config'}}->{'preExtraTime'}  != $config{"dvr.margin.start"})
+			    ||	($tvheadend_configs{$$timer_hp{'config'}}->{'postExtraTime'} != $config{"dvr.margin.stop"})
+			    ||	($tvheadend_configs{$$timer_hp{'config'}}->{'retention'}     != $lifetime_max)
 			) {
-				logging("INFO", "TVHEADEND: config need update (margins)"
+				logging("INFO", "TVHEADEND: config need update (margins/retention)"
 					. " preExtraTime=" . $tvheadend_configs{$$timer_hp{'config'}}->{'preExtraTime'}
 					. " start_margin=" . $config{"dvr.margin.start"}
 					. " postExtraTime=" . $tvheadend_configs{$$timer_hp{'config'}}->{'postExtraTime'}
 					. " stop_margin=" . $config{"dvr.margin.stop"}
+					. " retention=" . $tvheadend_configs{$$timer_hp{'config'}}->{'retention'}
+					. " lifetime=" . $lifetime_max
 				);
 				$flag_create_adjust_config = $$timer_hp{'config'};
 			};
@@ -394,6 +428,7 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 					. " storage=" . $tvheadend_configs{$$timer_hp{'config'}}->{'storage'}
 					. " (" . $folder_config . ")"
 					. " folder="  . $folder
+					. " retention="  . $lifetime_max
 				);
 				$flag_create_adjust_config = $$timer_hp{'config'};
 			};
@@ -407,12 +442,21 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 			$config_new{'identifier'}    = $$timer_hp{'config'};
 			$config_new{'preExtraTime'}  = $config{"dvr.margin.start"};
 			$config_new{'postExtraTime'} = $config{"dvr.margin.stop"};
+			$config_new{'retention'}     = $lifetime_max;
 
 			if (length($folder) > 0) {
 				$config_new{'storage'} = $tvheadend_configs{'default'}->{'storage'};
 				$config_new{'storage'} .= "/" if ($config_new{'storage'} !~ /\/$/o);
 				$config_new{'storage'} .= $folder;
 			};
+
+			logging("INFO", "TVHEADEND: create/update config:"
+				. " identifieer="   . $config_new{'identifier'}
+				. " preExtraTime="  . $config_new{'preExtraTime'}
+				. " postExtraTime=" . $config_new{'postExtraTime'}
+				. " retention="     . $config_new{'retention'}
+				. " storage="       . $config_new{'storage'}
+			);
 
 			push @d_configs_new, \%config_new;
 

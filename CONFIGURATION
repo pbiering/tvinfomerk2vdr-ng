@@ -1,6 +1,10 @@
 tvinfomerk2vdr-ng/Configuration
 ===============================
 
-Configuration:
+Prerequisites:
 --------------
-(coming next)
+	TVinfo credentials: username / password
+
+Channel Alignment:
+------------------
+# perl ./tvinfomerk2vdr-ng.pl -U <username> -P <password> --scs

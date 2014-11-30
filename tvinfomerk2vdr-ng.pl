@@ -74,7 +74,7 @@ our $progversion = "1.0.0";
 #
 # - check for non-empty timer list on SERVICE
 # - run script in dry-run mode
-#    ./tvinfomerk2vdr-ng-wrapper.sh -N -u USER
+#    ./tvinfomerk2vdr-ng-wrapper.sh -N -U <service-user> -P <service-password>
 
 ## Workflow
 # - retrieve channels from SERVICE
@@ -199,9 +199,28 @@ $traceclass{'HTSP'} = 0;
 	# 0x4000: skipped channels (not enabled)
 
 $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
+	#$traceclass{'TVINFO'} |= 0x0040; # XML Merkzettel (parsed)
+
+## properties and their default
+my %properties;
+my %properties_default = (
+	'dvr.service-user.default.folder'   => '.',
+	'dvr.service-user.default.lifetime' => 100 * 365, # 100 years
+	'dvr.service-user.default.priority' => 99, # 99: highest priority
+	'dvr.host.default.margin.start'     => 10,
+	'dvr.host.default.margin.stop'      => 35,
+);
+
+my %properties_descriptions = (
+	'dvr.service-user.default'	=> "DVR related default settings to SERVICE",
+	'dvr.service-user'		=> "DVR related settings to SERVICE user",
+	'dvr.host.default'		=> "DVR host related default settings",
+	'dvr.host'			=> "DVR host related settings",
+	'service.default'		=> "SERVICE related default settings",
+	'service.tvinfo'		=> "SERVICE related settings",
+);
 
 ## filled from properties (configuration) file
-my %properties;
 my @service_users;
 my @dvr_hosts;
 
@@ -314,7 +333,7 @@ foreach my $dvr_module (@dvr_modules) {
 foreach my $module (@modules) {
 	if (-e $module) {
 		require($module);
-		logging("INFO", "load module: " . $module);
+		logging("DEBUG", "load module: " . $module);
 	} else {
 		logging("WARN", "module not existing: " . $module);
 	};
@@ -376,7 +395,7 @@ my $options_result = GetOptions (
 	"S"		=> \$opt_S,
 
 	# properties file
-	"properties|rc=s"	=> \$opt_properties,
+	"properties|rp=s"	=> \$opt_properties,
 	"pp"			=> \$opt_print_properties,
 
 	# DVR
@@ -501,6 +520,15 @@ if (defined $opt_properties) {
 	};
 };
 
+###############################################################################
+# Apply default values
+###############################################################################
+# apply default values to properties if not already defined via option or properties file
+foreach my $key (keys %properties_default) {
+	if (! defined $properties{$key}) {
+		$properties{$key} = $properties_default{$key};
+	};
+};
 
 ###############################################################################
 # Options validation
@@ -587,19 +615,6 @@ if (defined $opt_p) {
 	};
 };
 
-## -F/--folder
-if (defined $opt_F) {
-	if ($opt_F =~ /^[0-9a-z]+$/io) {
-		$config{'dvr.folder'} = $opt_F;
-	} else {
-		print "ERROR : unsupported folder: " . $opt_F . "\n";
-		exit 2;
-	};
-} else {
-	$config{'dvr.folder'} = "."; # special value for "no-folder"
-};
-
-
 ## map old config-ng.pl values to new structure
 if (defined $setupfile) {
 	print "ERROR : parameter 'setupfile' in config-ng.pl is no longer supported\n";
@@ -607,7 +622,9 @@ if (defined $setupfile) {
 };
 
 # migration from config-ng.pl
-$properties{'service.default.proxy'} = $http_proxy if defined ($http_proxy);;
+$properties{'service.default.proxy'} = $http_proxy if defined ($http_proxy);
+$properties{'dvr.service-user.default.priority'} = $prio if defined ($prio);
+$properties{'dvr.service-user.default.lifetime'} = $lifetime if defined ($lifetime);
 
 ## debug: raw file read/write handling
 # -R is covering all
@@ -687,6 +704,27 @@ if ($config{'service.source.type'} ne "file") {
 	};
 };
 
+# fill user/pass into properties
+if ((defined $opt_U) && (defined $opt_P) &&
+    (! defined $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"})) {
+	$properties{'service.' . $setup{'service'} . ".user." . $opt_U . ".password"} = $opt_P;
+};
+
+
+## -F/--folder
+if (defined $opt_F) {
+	if ($opt_F =~ /^[0-9a-z]+$/io) {
+		$config{'dvr.folder'} = $opt_F;
+
+		# fill also into properties
+		$properties{'dvr.service-user.' . $config{'service.user'} . ".folder"} = $config{'dvr.folder'};
+	} else {
+		print "ERROR : unsupported folder: " . $opt_F . "\n";
+		exit 2;
+	};
+};
+
+
 ## --prefix
 # defaults for read/write raw files
 $config{'service.source.file.prefix'}  = "service-" . $setup{'service'} . "-" . $config{'service.user'};
@@ -700,7 +738,6 @@ if (! defined $config{'dvr.host'}) {
 	logging("ERROR : DVR host not specified (and unable to autodetect)");
 	exit 2;
 };
-
 
 # Debug Class handling
 if (defined $opt_C) {
@@ -730,6 +767,31 @@ if (! defined $setup{'dvr'}) {
 #	exit 2;
 #};
 
+###############################################################################
+# Applying default properties
+###############################################################################
+## priority
+if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'}) {
+	$config{'dvr.priority'} = $properties{'dvr.service-user.default.priority'};
+} else {
+	$config{'dvr.priority'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'};
+};
+
+## lifetime
+if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'}) {
+	$config{'dvr.lifetime'} = $properties{'dvr.service-user.default.lifetime'};
+} else {
+	$config{'dvr.lifetime'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'};
+};
+
+## folder
+if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'}) {
+	$config{'dvr.folder'} = $properties{'dvr.service-user.default.folder'};
+} else {
+	$config{'dvr.folder'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'};
+};
+
+
 
 ###############################################################################
 # Reading external values
@@ -738,13 +800,13 @@ if (! defined $setup{'dvr'}) {
 $module_functions{'dvr'}->{$setup{'dvr'}}->{'init'}() || die "Problem with dvr_init";
 
 if (! defined $config{"dvr.margin.start"}) {
-	logging("NOTICE", "DVR: no default MarginStart provided, take default (10 min)");
-	$config{"dvr.margin.start"} = 10; # minutes
+	$config{"dvr.margin.start"} = $properties{'dvr.host.default.margin.start'};
+	logging("NOTICE", "DVR: no default MarginStart provided, take default: " . $config{"dvr.margin.start"} . " (dvr.host.default.margin.start)");
 };
 
 if (! defined $config{"dvr.margin.stop"}) {
-	logging("NOTICE", "DVR: no default MarginStop provided, take default (35 min)");
-	$config{"dvr.margin.stop"} = 35; # minutes
+	$config{"dvr.margin.stop"} = $properties{'dvr.host.default.margin.stop'};
+	logging("NOTICE", "DVR: no default MarginStop provided, take default: " . $config{"dvr.margin.stop"} . " (dvr.host.default.margin.stop)");
 };
 
 
@@ -752,17 +814,34 @@ if (! defined $config{"dvr.margin.stop"}) {
 # Print Properties / internal configuration
 ###############################################################################
 if (defined $opt_print_properties) {
-	logging("NOTICE", "print of properties (configuration) begin");
-	print "# $progname/$progversion configuration\n";
-	print "#  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
+	logging("NOTICE", "=" x5 . "print of properties (configuration) begin");
+	print "### $progname/$progversion configuration\n";
+	print "###  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
 
+	my $description = "";
+	my $description_old = "";
 	for my $property (sort keys %properties) {
+		# find best matching description text
+		my $key_desc_length = 0;
+		for my $key_desc_candidate (sort keys %properties_descriptions) {
+			if (($property =~ /^$key_desc_candidate/) && (length($key_desc_candidate) > $key_desc_length)) {
+				$key_desc_length = length($key_desc_candidate);
+				$description = $properties_descriptions{$key_desc_candidate};
+			};
+		};
+
+		if ((defined $description) && ($description_old ne $description) && ($description ne "")) {
+			$description_old = $description;
+			printf "\n";
+			printf "## %s\n", $description;
+		};
+
 		my $value = $properties{$property};
 		$value = "" if (! defined $properties{$property});
 		printf "%s=%s\n", $property, $value;
 	};
 
-	logging("NOTICE", "print of properties (configuration) end");
+	logging("NOTICE", "=" x5 . "print of properties (configuration) end");
 };
 
 if (defined $opt_print_internal_config) {
@@ -895,7 +974,7 @@ my %service_cid_to_dvr_cid_map_unfiltered;
 if (defined $opt_show_channelmap_suggestions) {
 	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered, \@channels_service, \%flags_channelmap);
 
-	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered);
+	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered) if ($verbose > 0);
 
 	my $hint = 0;
 
@@ -912,11 +991,11 @@ if (defined $opt_show_channelmap_suggestions) {
 		};
 
 		$hint = 1;
-		logging("NOTICE", "SERVICE: candidate to enable channel: " . $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'name'} . "  =>  " . get_dvr_channel_name_by_cid($service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'cid'}));
+		logging("NOTICE", "SERVICE: channel candidate to enable: " . $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'name'} . "  =>  " . get_dvr_channel_name_by_cid($service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'cid'}));
 	};
 
 	if ($hint == 0) {
-		logging("NOTICE", "SERVICE: no channel candidates found to enable channel - looks like all possible channels are configured");
+		logging("NOTICE", "SERVICE: no channel candidates found to enable - looks like all possible channels are configured");
 	};
 
 	exit 0;
@@ -1245,8 +1324,8 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 
 ## check for timers found in DVR but not provided by SERVICE
 if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
-	my $service_data = $setup{'service'} . ":" . $config{'service.' . $setup{'service'} . '.user'};
-	my $dvr_data_prefix = $config{'service.' . $setup{'service'} . '.user'} . ":";
+	my $service_data = $setup{'service'} . ":" . $config{'service.user'};
+	my $dvr_data_prefix = $config{'service.user'} . ":";
 
 	foreach my $d_timer_num (@d_timers_num) {
 		# already found?
@@ -1322,6 +1401,7 @@ if (scalar(keys %d_timers_action) > 0) {
 };
 
 ## final preparation of SERVICE actions
+my $timers_skipped = 0;
 if (scalar(keys %s_timers_action) > 0) {
 	foreach my $s_timer_num (sort { $s_timers_action{$a} cmp $s_timers_action{$b} } sort { $a cmp $b } keys %s_timers_action) {
 		my $loglevel;
@@ -1343,6 +1423,10 @@ if (scalar(keys %s_timers_action) > 0) {
 			# remove sub-channel token
 			$d_timer{'cid'} =~ s/#.*$//o;
 
+			# add priority/lifetime
+			$d_timer{'priority'} = $config{'dvr.priority'};
+			$d_timer{'lifetime'} = $config{'dvr.lifetime'};
+
 			push @d_timers_new, \%d_timer;
 
 			logging($loglevel, "SERVICE-ACTION:"
@@ -1352,6 +1436,8 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
 				. " d_cid="     . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
+				. " prio="    . $d_timer{'priority'}
+				. " lft="     . $d_timer{'lifetime'}
 				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
 		} else {
@@ -1365,6 +1451,10 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
 				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
+
+			if ($s_timers_action{$s_timer_num} =~ /^skip/o) {
+				$timers_skipped++;
+			};
 		};
 	};
 } else {
@@ -1374,6 +1464,7 @@ if (scalar(keys %s_timers_action) > 0) {
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
 	logging(($rc > 0) ? "WARN" : "INFO", "result of create/update/delete: " . $rc);
+	logging("WARN", "timers skipped: " . $timers_skipped) if ($timers_skipped > 0);
 } else {
 	logging("INFO", "finally nothing to do");
 };

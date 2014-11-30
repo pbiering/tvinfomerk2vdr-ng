@@ -281,7 +281,7 @@ sub print_service_dvr_channel_map($$;$) {
 		$count_all++;
 
 		if (! defined $d_cid || $d_cid eq "0" || $d_cid eq "") {
-			logging("WARN", "SERVICE: no DVR Channel found: " . sprintf("%-" . $s_name_maxlen . "s %3d", $s_name, $s_cid));
+			logging("WARN", "SERVICE: no DVR channel found: " . sprintf("%-" . $s_name_maxlen . "s %3d", $s_name, $s_cid) . " (candidate for deselect)");
 			$count_notfound++;
 			next;
 		};

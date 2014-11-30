@@ -3,20 +3,18 @@ tvinfomerk2vdr-ng
 
 Prerequisites:
 --------------
-- download package
+- download package as ZIP from https://github.com/pbiering/tvinfomerk2vdr-ng/
+   e.g. (for branch devel)
+	curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/devel
+
 - follwing installations depending on system
 	INSTALL.OpenELEC
 	INSTALL.ReelBox
 
-
-
-- downloaded package
-   Browse to http://www.activestate.com/activeperl/downloads
-   transfer via SCP to destination into /tmp directory
-
-
 Installation
 ------------
+- get destination folder from
+
 - extract:
    # tar xzf /tmp/ActivePerl-5.18.2.1802-i686-linux-64int-glibc-2.5-298023.tar.gz  -C /tmp
 - install:

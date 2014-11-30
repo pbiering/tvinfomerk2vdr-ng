@@ -17,9 +17,10 @@ use utf8;
 use Data::Dumper;
 use LWP;
 use HTTP::Request::Common;
+use HTTP::Date;
 use XML::Simple;
 use Encode;
-use Date::Manip;
+#use Date::Manip;
 use Digest::MD5 qw(md5_hex);
 
 ## debug/trace information
@@ -187,10 +188,10 @@ sub service_tvinfo_get_channels($$;$) {
 	};
 
 	# Version currently missing
-	#if ($$data{'version'} ne "1.0") {
-	#	logging ("ALERT", "XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
-	#	exit 1;
-	#};
+	if ($$data{'version'} ne "1.0") {
+		logging ("ALERT", "XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
+		exit 1;
+	};
 
 	if ($xml_raw !~ /stations/) {
 		logging ("ERROR", "TVINFO: XML don't contain any stations, empty or username/passwort not proper, can't proceed");
@@ -280,7 +281,18 @@ sub service_tvinfo_get_channels($$;$) {
 #   0x40: XML dump each schedules
 #
 # XML structure:
-#    TODO
+#$VAR1 = {
+#          'uid' => '795006859',
+#          'title' => 'Tagesschau',
+#          'cast_director' => {},
+#          'starttime' => '2014-12-06 20:00:00 +0100',
+#          'eventtype' => 'rec',
+#          'cast_actors' => {},
+#          'nature' => 'Nachrichten',
+#          'endtime' => '2014-12-06 20:15:00 +0100',
+#          'channel' => 'ARD',
+#          'format' => 'Nachrichten'
+#        };
 ################################################################################
 sub service_tvinfo_get_timers($) {
 	my $timers_ap = $_[0];
@@ -408,8 +420,8 @@ sub service_tvinfo_get_timers($) {
 		my $xml_title     = $$xml_entry_p{'title'};
 		my $xml_channel   = $$xml_entry_p{'channel'};
 
-		my $start_ut = UnixDate(ParseDate($xml_starttime), "%s");
-		my $stop_ut  = UnixDate(ParseDate($xml_endtime  ), "%s");
+		my $start_ut = str2time($xml_starttime);
+		my $stop_ut  = str2time($xml_endtime  );
 
 		if ($$xml_entry_p{'eventtype'} ne "rec") {
 			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");

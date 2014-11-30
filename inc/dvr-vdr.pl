@@ -331,6 +331,11 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 		$$timer_hp{'start_ut'} -= $$timer_hp{'start_margin'} * 60; # seconds
 		$$timer_hp{'stop_ut'}  += $$timer_hp{'stop_margin'}  * 60; # seconds
 
+		# reduce lifetime to VDR max (99)
+		if ($$timer_hp{'lifetime'} > 99) {
+			$$timer_hp{'lifetime'} = 99;
+		};
+
 		## append dvr_data and service_data to summary
 		$$timer_hp{'summary'} .= "|"
 			. "(service-data=" . $$timer_hp{'service_data'} . ")"

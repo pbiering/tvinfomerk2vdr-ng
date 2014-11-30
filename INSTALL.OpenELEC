@@ -9,4 +9,17 @@ Prerequisites
 
 Installation
 ------------
-(coming next)
+- create destination directory
+	mkdir /storage/tvinfomerk2vdr-ng
+
+- unpack
+	unzip -d /storage /tmp/tvinfomerk2vdr-ng.zip
+
+
+Configuration
+-------------
+- change to destination directory
+	cd /storage/tvinfomerk2vdr-ng
+	cd /storage/tvinfomerk2vdr-ng-devel (in case of devel branch)
+
+see now CONFIGURATION

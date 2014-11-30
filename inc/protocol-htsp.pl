@@ -33,8 +33,6 @@ $htsp_client->agent("Mozilla/4.0 (tvinfomerk2vdr-ng)");
 our %traceclass;
 our %debugclass;
 
-our $prio;
-our $lifetime;
 
 ################################################################################
 ################################################################################
@@ -678,12 +676,14 @@ sub protocol_htsp_get_config($$;$) {
 				. " storage="       . $$entry{'storage'}
 				. " preExtraTime="  . $$entry{'preExtraTime'}
 				. " postExtraTime=" . $$entry{'postExtraTime'}
+				. " retention="     . $$entry{'retention'}
 			);
 
 			push @$configs_ap, {
 				'storage'       => $$entry{'storage'},
 				'preExtraTime'  => $$entry{'preExtraTime'},
 				'postExtraTime' => $$entry{'postExtraTime'},
+				'retention'     => $$entry{'retention'},
 			};
 		};
 	};
@@ -858,10 +858,11 @@ sub protocol_htsp_delete_add_timers($$) {
 	foreach my $config_hp (@$config_add_update_ap) {
 		push @commands_htsp, "POST /dvr"
 			. "?op=saveSettings"
-			. "&config_name="  . $$config_hp{'identifier'}
-			. "&storage="      . $$config_hp{'storage'}
-			. "&preExtraTime=" . $$config_hp{'preExtraTime'}
+			. "&config_name="   . $$config_hp{'identifier'}
+			. "&storage="       . $$config_hp{'storage'}
+			. "&preExtraTime="  . $$config_hp{'preExtraTime'}
 			. "&postExtraTime=" . $$config_hp{'postExtraTime'}
+			. "&retention="     . $$config_hp{'retention'}
 			;
 		$counters{'config'}++ if ($destination eq "file");
 	};
@@ -872,8 +873,6 @@ sub protocol_htsp_delete_add_timers($$) {
 		push @commands_htsp, "POST /dvr?entryId=" . $num . "&op=cancelEntry";
 		$counters{'del'}++ if ($destination eq "file");
 	};
-
-	$prio = "Normal"; # TODO support others depending on $prio
 
 	# add timers
 	foreach my $timer_hp (@$timers_add_ap) {
@@ -887,7 +886,7 @@ sub protocol_htsp_delete_add_timers($$) {
 			#. "&date="        . strftime("%m/%d/%Y", localtime($$timer_hp{'start_ut'}))
 			#. "&starttime="   . strftime("%H:%M", localtime($$timer_hp{'start_ut'})) 
 			#. "&stoptime="    . strftime("%H:%M", localtime($$timer_hp{'stop_ut'}))
-			. "&pri="         . $prio
+			. "&pri="         . $$timer_hp{'priority'}
 			. "&config_name=" . $$timer_hp{'config'}
 			. "&title="       . $$timer_hp{'title'}
 			;
@@ -962,7 +961,7 @@ sub protocol_htsp_delete_add_timers($$) {
 		$summary .= " " . $key . "=" . $counters{$key};
 	};
 
-	logging("INFO", "HTSP: summary timers" . $summary);
+	logging("INFO", "HTSP: summary timers" . $summary) if ($summary ne "");
 	return 0;
 };
 

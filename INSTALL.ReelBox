@@ -3,8 +3,16 @@ tvinfomerk2vdr-ng/ReelBox
 
 Prerequisites
 -------------
-(coming next)
+- install missing Perl modules
+	libxml-simple-perl
+	libdate-calc-perl
+	(more coming next)
+
 
 Installation
 ------------
-(coming next)
+- create destination directory
+        mkdir /opt/tvinfomerk2vdr-ng
+
+- unzip
+	...
