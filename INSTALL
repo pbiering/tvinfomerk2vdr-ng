@@ -7,72 +7,8 @@ Prerequisites:
    e.g. (for branch devel)
 	curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/devel
 
-- follwing installations depending on system
-	INSTALL.OpenELEC
-	INSTALL.ReelBox
-
 Installation
 ------------
-- get destination folder from
-
-- extract:
-   # tar xzf /tmp/ActivePerl-5.18.2.1802-i686-linux-64int-glibc-2.5-298023.tar.gz  -C /tmp
-- install:
-   # cd ActivePerl-5.18.2.1802-i686-linux-64int-glibc-2.5-298023/
-   # ./install
-
-Checking package...done
-
-Welcome to ActivePerl
-
-    ActivePerl is ActiveState's quality-assured binary build of
-    Perl.  In order to install ActivePerl you need to agree to
-    the ActivePerl is covered by the ActiveState Community License..
-
-Did you read the LICENSE.txt file? [no] yes
-Do you agree to the ActivePerl is covered by the ActiveState Community License.? [no] yes
-
-    This installer can install ActivePerl in any location of your
-    choice. You do not need root privileges.  However, please make sure
-    that you have write access to this location.
-
-Enter top level directory for install? [/opt/ActivePerl-5.18] /storage/ActivePerl-5.18  <--!!!
-
-    The ActivePerl documentation is available in HTML format.  If installed
-    it will be available from file:///storage/ActivePerl-5.18/html/index.html.
-    If not installed you will still be able to read all the basic perl and
-    module documentation using the man or perldoc utilities.
-
-Install HTML documentation [yes] no
-Ok.
-
-    The typical ActivePerl software installation requires 200 megabytes.
-    Please make sure enough free space is available before continuing.
-
-Proceed? [yes] yes
-
-Installing ActivePerl...
-Copying files to /storage/ActivePerl-5.18...done
-Relocating...done (261 files relocated)
-Syncing perl PPM database with .packlists...done 
-
-ActivePerl has been successfully installed at /storage/ActivePerl-5.18.
-
-Please modify your startup environment by adding:
-
-   /storage/ActivePerl-5.18/site/bin:/storage/ActivePerl-5.18/bin to PATH
-   /storage/ActivePerl-5.18/site/man:/storage/ActivePerl-5.18/man to MANPATH
-
-For general questions or comments about ActivePerl, please
-contact us at <support@activestate.com>.
-
-Thank you for using ActivePerl!
-
-- extend paths
-   echo "export PATH=\$PATH:/storage/ActivePerl-5.18/site/bin:/storage/ActivePerl-5.18/bin" >>/storage/.profile
-   echo "export MANPATH=\$MANPATH:/storage/ActivePerl-5.18/site/man:/storage/ActivePerl-5.18/man" >>/storage/.profile
-
-- reboot to acivate paths
-
-- test perl binary
-    # perl -e 'print "Perl Installation OK\n";'
+- following installations depending on system
+	INSTALL.OpenELEC
+	INSTALL.ReelBox
