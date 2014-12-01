@@ -20,6 +20,14 @@ Notes:
 - in case of DVR is not local installed, use -d <DVR host>
 
 
+Channel Map Result:
+-------------------
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scm
+
+(this shows the channel mapping between SERVICE and DVR)
+
+
+
 Dry-run of syncing timers (aka schedules or "Merkliste"):
 ---------------------------------------------------------
 $ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -N

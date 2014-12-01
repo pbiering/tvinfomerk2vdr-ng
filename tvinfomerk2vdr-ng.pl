@@ -208,11 +208,13 @@ $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
 ## properties and their default
 my %properties;
 my %properties_default = (
-	'dvr.service-user.default.folder'   => '.',
-	'dvr.service-user.default.lifetime' => 100 * 365, # 100 years
-	'dvr.service-user.default.priority' => 99, # 99: highest priority
-	'dvr.host.default.margin.start'     => 10,
-	'dvr.host.default.margin.stop'      => 35,
+	'dvr.service-user.default.folder'      => '.',
+	'dvr.service-user.default.lifetime'    => 100 * 365, # 100 years
+	'dvr.service-user.default.priority'    => 99, # 99: highest priority
+	'dvr.host.default.margin.start'        => 10,
+	'dvr.host.default.margin.stop'         => 35,
+	'dvr.host.default.use-ca-channels'     => 0,  # use also CA channels
+	'dvr.host.default.whitelist-ca-groups' => '', # whitelisted CA groups
 );
 
 my %properties_descriptions = (
@@ -283,9 +285,11 @@ DVR related
          -F|--folder <folder>      folder for DVR records (default: none)
 
 Channel Mapping
-         -c                        show Channel Map results (and stop)
+         -c|--scm                  Show Channel Map results (and stop)
          -u                        show unfiltered Channel Map results (and stop)
          --scs                     Show Channelmap Suggestions
+         --ucc                     Use CA Channels (default: no use)
+         --wcg <group>             Whitelist-Ca-Group (can be used more than one time)
 
 Debug options:
          -v                        Show verbose messages
@@ -374,6 +378,8 @@ my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
 my ($opt_print_properties, $opt_properties, $opt_skip_read_properties);
 my ($opt_print_internal_config);
+my ($opt_use_ca_channels, @opt_whitelist_ca_group);
+
 
 Getopt::Long::config('bundling');
 
@@ -403,9 +409,11 @@ my $options_result = GetOptions (
 	#"system=s"	=> \$opt_system,
 
 	# Channelmap
-	"c"		=> \$opt_c,
+	"c|scm"		=> \$opt_c,
 	"u"		=> \$opt_u,
 	"scs"		=> \$opt_show_channelmap_suggestions,
+	"ucc"		=> \$opt_use_ca_channels,
+	"wcg"		=> \@opt_whitelist_ca_group,
 
 	# general debug
 	"C:s"		=> \$opt_C,
@@ -450,6 +458,7 @@ logging("DEBUG", "list of supported SERVICEs: " . join(" ", @service_list_suppor
 logging("DEBUG", "list of supported DVRs    : " . join(" ", @dvr_list_supported));
 #logging("INFO", "list of supported SYSTEMs : " . join(" ", @system_list_supported));
 
+
 ###############################################################################
 # Autodetection
 ###############################################################################
@@ -466,6 +475,7 @@ foreach my $dvr (@dvr_list_supported) {
 		};
 	};
 };
+
 
 ###############################################################################
 # Read configuration from file
@@ -544,6 +554,7 @@ if (defined $file_properties) {
 	};
 };
 
+
 ###############################################################################
 # Apply default values
 ###############################################################################
@@ -553,6 +564,7 @@ foreach my $key (keys %properties_default) {
 		$properties{$key} = $properties_default{$key};
 	};
 };
+
 
 ###############################################################################
 # Options validation
@@ -635,7 +647,7 @@ if (defined $opt_p) {
 } else {
 	if (defined $properties{"dvr.host." . $config{'dvr.host'} . ".port"}) {
 		$config{'dvr.port'} = $properties{"dvr.host." . $config{'dvr.host'} . ".port"};
-		logging("INFO", "take port from properties: " . $config{'dvr.port'});
+		logging("INFO", "take DVR port from properties: " . $config{'dvr.port'});
 	};
 };
 
@@ -762,6 +774,22 @@ if (! defined $config{'dvr.host'}) {
 	logging("ERROR : DVR host not specified (and unable to autodetect)");
 	exit 2;
 };
+
+## CA channels related options
+if (defined $opt_use_ca_channels) {
+	$skip_ca_channels = 0;
+	$properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"} = (1 - $skip_ca_channels);
+} elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"}) {
+	$skip_ca_channels = 1 - $properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"};
+};
+
+if (scalar(@opt_whitelist_ca_group) > 0) {
+	$whitelist_ca_groups = join(",", @opt_whitelist_ca_group);
+	$properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} = $whitelist_ca_groups;
+} elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"}) {
+	$whitelist_ca_groups = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
+};
+
 
 # Debug Class handling
 if (defined $opt_C) {
@@ -1141,10 +1169,21 @@ if (scalar(@s_timers_num) > 0) {
 	logging("DEBUG", "SERVICE/DVR: following SERVICE timers need to check/add (amount: " . scalar(@s_timers_num) . "): " . join(" ", @s_timers_num));
 };
 
-#
-
+## check timers from DVR
+my @d_timers_num_skipped;
 foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timers_entries{$b}->{'start_ut'}} @d_timers_num) {
 	my $d_timer_hp = $d_timers_entries{$d_timer_num};
+
+	# skip DVR timers in the past
+	if ($$d_timer_hp{'stop_ut'} < time()) {
+		logging("DEBUG", "SERVICE/DVR: skip DVR timer - stop time in the past: tid=" . $$d_timer_hp{'tid'});
+		push @d_timers_num_skipped, $d_timer_num;
+		next;
+	} elsif ($$d_timer_hp{'start_ut'} < time()) {
+		logging("DEBUG", "SERVICE/DVR: skip DVR timer - start time in the past: tid=" . $$d_timer_hp{'tid'});
+		push @d_timers_num_skipped, $d_timer_num;
+		next;
+	};
 
 	logging("DEBUG", "SERVICE/DVR: existing DVR timer"
 		. " tid="    . sprintf("%-2d", $d_timer_num)
@@ -1162,9 +1201,10 @@ foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timer
 my @s_timers_num_found;
 my @d_timers_num_found;
 
-foreach my $s_timer_num (@s_timers_num) {
+foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timers_entries{$b}->{'start_ut'} } @s_timers_num) {
 	my $s_timer_hp = $s_timers_entries{$s_timer_num};
 
+	# skip SERVICE timers in the past
 	if ($$s_timer_hp{'stop_ut'} < time()) {
 		$s_timers_action{$s_timer_num} = "skip/stop-in-past";
 		logging("DEBUG", "SERVICE/DVR: skip SERVICE timer - stop time in the past: tid=" . $$s_timer_hp{'tid'});
@@ -1183,8 +1223,9 @@ foreach my $s_timer_num (@s_timers_num) {
 		. " title='" . $$s_timer_hp{'title'} . "'"
 	);
 
-	foreach my $d_timer_num (@d_timers_num) {
-		next if (defined $d_timers_action{$d_timer_num} && $d_timers_action{$d_timer_num} eq "match");
+	foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timers_entries{$b}->{'start_ut'} } @d_timers_num) {
+		next if (grep /^$d_timer_num$/, @d_timers_num_found); # already found
+		next if (grep /^$d_timer_num$/, @d_timers_num_skipped); # already 
 
 		my $d_timer_hp = $d_timers_entries{$d_timer_num};
 
@@ -1355,6 +1396,7 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 	foreach my $d_timer_num (@d_timers_num) {
 		# already found?
 		next if (grep /^$d_timer_num$/, @d_timers_num_found); 
+		next if (grep /^$d_timer_num$/, @d_timers_num_skipped); 
 
 		my $d_timer_hp = $d_timers_entries{$d_timer_num};
 
@@ -1366,14 +1408,6 @@ if (scalar(@d_timers_num) > scalar(@d_timers_num_found)) {
 			. " title='" . $$d_timer_hp{'title'} . "'"
 			. " s_d="    . $$d_timer_hp{'service_data'}
 		) if ($verbose > 0);
-
-		if ($$d_timer_hp{'stop_ut'} < time()) {
-			logging("DEBUG", "SERVICE/DVR: skip DVR timer, stop time in the past: tid=" . $d_timer_num);
-			next;
-		} elsif ($$d_timer_hp{'start_ut'} < time()) {
-			logging("DEBUG", "SERVICE/DVR: skip DVR timer, start time in the past: tid=" . $d_timer_num);
-			next;
-		};
 
 		if ($service_data eq $$d_timer_hp{'service_data'}) {
 			logging("INFO", "SERVICE/DVR: DVR timer belongs only to " . $service_data . ":"
@@ -1488,7 +1522,7 @@ if (scalar(keys %s_timers_action) > 0) {
 
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
-	logging(($rc > 0) ? "WARN" : "INFO", "result of create/update/delete: " . $rc);
+	logging(($rc > 0) ? "WARN" : "INFO", "result of DVR create/update/delete: " . $rc);
 	logging("WARN", "timers skipped: " . $timers_skipped) if ($timers_skipped > 0);
 } else {
 	logging("INFO", "finally nothing to do");
