@@ -74,5 +74,5 @@ Run again using default properties file and syslog output:
 $ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -L
 
 Output messages should appear now in syslog
-- reelbox: TODO
+- reelbox: /var/log/messages
 - openelec: only remote syslog after creating a remote log forwarder

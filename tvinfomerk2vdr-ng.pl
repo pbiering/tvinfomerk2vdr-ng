@@ -1555,6 +1555,7 @@ if (scalar(keys %s_timers_action) > 0) {
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
 	logging(($rc > 0) ? "WARN" : "INFO", "result of DVR create/update/delete: " . $rc);
+	logging("NOTICE", "dry-run mode selected (-N) - no changes applied to DVR!") if (defined $opt_N);
 	logging("WARN", "timers skipped: " . $timers_skipped) if ($timers_skipped > 0);
 } else {
 	logging("INFO", "finally nothing to do");

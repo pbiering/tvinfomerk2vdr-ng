@@ -34,7 +34,6 @@ our $opt_T;
 our $opt_S;
 our $opt_L;
 our %debug_class;
-our $username;
 
 ## local variables
 my %debug_suppressed;
@@ -117,8 +116,8 @@ sub logging($$) {
 			$level = "ERR";
 		};
 
-		if (defined $username) {
-			$message = $username . ": " . $message;
+		if ((defined $config{'service.user'}) && ($config{'service.user'} ne "<TODO>") && ($config{'service.user'} ne "")) {
+			$message = $config{'service.user'} . ": " . $message;
 		};	
 
 		syslog($level, '%s', $message);
