@@ -143,14 +143,14 @@ our %debug_class = (
 our ($opt_R, $opt_W, $opt_X, $opt_h, $opt_v, $opt_N, $opt_d, $opt_p, $opt_D, $opt_U, $opt_P, $opt_F, $opt_T, $opt_C, $opt_c, $opt_L, $opt_S, $opt_u, $opt_K, $opt_E);
 
 ## config-ng.pl
-our $http_proxy;
-our $username;
-our $password;
-our ($prio, $lifetime);
+our $http_proxy;		# mapped
+our $username;			# mapped
+our $password;			# mapped
+our ($prio, $lifetime);		# mapped
 our $setupfile;			# no longer used
 our $networktimeout;
-our $skip_ca_channels;
-our $whitelist_ca_groups;
+our $skip_ca_channels;		# mapped
+our $whitelist_ca_groups;	# mapped
 
 # defaults
 #if (! defined $skip_ca_channels) { $skip_ca_channels = 1 };
@@ -654,7 +654,7 @@ if (defined $opt_p) {
 
 ## map old config-ng.pl values to new structure
 if (defined $setupfile) {
-	logging("WARN", "parameter 'setupfile' in config-ng.pl is no longer supported");
+	logging("DEBUG", "parameter 'setupfile' in config-ng.pl is no longer supported");
 };
 
 # migration from config-ng.pl

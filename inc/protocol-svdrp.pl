@@ -313,10 +313,10 @@ sub protocol_svdrp_get_timers($$;$) {
 
 		# check for active timera
 		if ($tmstatus == 9) {
-			logging("NOTICE", "SVDRP: timer is currently recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
+			logging("DEBUG", "SVDRP: timer is currently recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
 			next;
 		} elsif ($tmstatus != 1) {
-			logging("NOTICE", "SVDRP: timer is not active/waiting for recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
+			logging("DEBUG", "SVDRP: timer is not active/waiting for recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
 			next;
 		};
 
