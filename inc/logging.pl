@@ -36,6 +36,9 @@ our $opt_L;
 our %debug_class;
 our $username;
 
+## local variables
+my %debug_suppressed;
+
 
 ###############################################################################
 ## Functions
@@ -80,7 +83,8 @@ sub logging($$) {
 	if (($debug != 0) && ($level =~ /^(DEBUG|TRACE)$/o)) {
 		# check for debug class
 		for my $key (keys %debug_class) {
-			if ($_[1] =~ /^$key/ && ($debug_class{$key} == 0)) {
+			if ($_[1] =~ /^$key:/ && ($debug_class{$key} == 0)) {
+				$debug_suppressed{$key}++;
 				return;
 			};
 		};
@@ -123,3 +127,11 @@ sub logging($$) {
 	};
 };
 
+
+sub logging_shutdown() {
+	if ($debug != 0) {
+		foreach my $key (sort keys %debug_suppressed) {
+			logging("DEBUG", "suppressed debug/trace lines: " . $key . ":" . $debug_suppressed{$key});
+		};
+	};
+};

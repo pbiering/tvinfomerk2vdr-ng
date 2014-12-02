@@ -126,6 +126,7 @@ our %debug_class = (
 	"MATCH"       => 0,
 	"VDR"         => 0,
 	"SVDRP"       => 0,
+	"SERVICE"     => 0,
 	"HTSP"        => 0,
 	"CHANNELS"    => 0,
 	"TVINFO"      => 0,
@@ -152,8 +153,8 @@ our $skip_ca_channels;
 our $whitelist_ca_groups;
 
 # defaults
-if (! defined $skip_ca_channels) { $skip_ca_channels = 1 };
-if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
+#if (! defined $skip_ca_channels) { $skip_ca_channels = 1 };
+#if (! defined $whitelist_ca_groups) { $whitelist_ca_groups = "" };
 
 
 ###############################################################################
@@ -213,7 +214,7 @@ my %properties_default = (
 	'dvr.service-user.default.priority'    => 99, # 99: highest priority
 	'dvr.host.default.margin.start'        => 10,
 	'dvr.host.default.margin.stop'         => 35,
-	'dvr.host.default.use-ca-channels'     => 0,  # use also CA channels
+	'dvr.host.default.include-ca-channels' => 0,  # include CA channels
 	'dvr.host.default.whitelist-ca-groups' => '', # whitelisted CA groups
 );
 
@@ -288,7 +289,7 @@ Channel Mapping
          -c|--scm                  Show Channel Map results (and stop)
          -u                        show unfiltered Channel Map results (and stop)
          --scs                     Show Channelmap Suggestions
-         --ucc                     Use CA Channels (default: no use)
+         --icc                     Include Ca Channels (default: no use)
          --wcg <group>             Whitelist-Ca-Group (can be used more than one time)
 
 Debug options:
@@ -378,7 +379,7 @@ my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
 my ($opt_print_properties, $opt_properties, $opt_skip_read_properties);
 my ($opt_print_internal_config);
-my ($opt_use_ca_channels, @opt_whitelist_ca_group);
+my ($opt_include_ca_channels, @opt_whitelist_ca_group);
 
 
 Getopt::Long::config('bundling');
@@ -412,8 +413,8 @@ my $options_result = GetOptions (
 	"c|scm"		=> \$opt_c,
 	"u"		=> \$opt_u,
 	"scs"		=> \$opt_show_channelmap_suggestions,
-	"ucc"		=> \$opt_use_ca_channels,
-	"wcg"		=> \@opt_whitelist_ca_group,
+	"icc"		=> \$opt_include_ca_channels,
+	"wcg=s"		=> \@opt_whitelist_ca_group,
 
 	# general debug
 	"C:s"		=> \$opt_C,
@@ -661,6 +662,18 @@ $properties{'service.default.proxy'} = $http_proxy if defined ($http_proxy);
 $properties{'dvr.service-user.default.priority'} = $prio if defined ($prio);
 $properties{'dvr.service-user.default.lifetime'} = $lifetime if defined ($lifetime);
 
+if (defined $skip_ca_channels) {
+	if ($skip_ca_channels eq "1") {
+		$properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"} = 0;
+	} else {
+		$properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"} = 1;
+	};
+};
+
+if (defined $whitelist_ca_groups) {
+	$properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} = $whitelist_ca_groups;
+};
+
 ## debug: raw file read/write handling
 # -R is covering all
 $opt_read_service_from_file = 1 if (defined $opt_R);
@@ -755,7 +768,7 @@ if (defined $opt_F) {
 		# fill also into properties
 		$properties{'dvr.service-user.' . $config{'service.user'} . ".folder"} = $config{'dvr.folder'};
 	} else {
-		print "ERROR : unsupported folder: " . $opt_F . "\n";
+		logging("ERROR", "unsupported folder: " . $opt_F);
 		exit 2;
 	};
 };
@@ -771,23 +784,24 @@ if (defined $opt_prefix) {
 };
 
 if (! defined $config{'dvr.host'}) {
-	logging("ERROR : DVR host not specified (and unable to autodetect)");
+	logging("ERROR", "DVR host not specified (and unable to autodetect)");
 	exit 2;
 };
 
 ## CA channels related options
-if (defined $opt_use_ca_channels) {
-	$skip_ca_channels = 0;
-	$properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"} = (1 - $skip_ca_channels);
-} elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"}) {
-	$skip_ca_channels = 1 - $properties{"dvr.host." . $config{'dvr.host'} . ".use-ca-channels"};
+if (defined $opt_include_ca_channels) {
+	$properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"} = 1;
+	$config{'dvr.include-ca-channels'} = $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"};
+} elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"}) {
+	$config{'dvr.include-ca-channels'} = $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"};
 };
 
+
 if (scalar(@opt_whitelist_ca_group) > 0) {
-	$whitelist_ca_groups = join(",", @opt_whitelist_ca_group);
-	$properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} = $whitelist_ca_groups;
+	$properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} = join(",", @opt_whitelist_ca_group);
+	$config{'dvr.whitelist-ca-groups'} = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
 } elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"}) {
-	$whitelist_ca_groups = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
+	$config{'dvr.whitelist-ca-groups'} = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
 };
 
 
@@ -944,6 +958,47 @@ sub get_service_channel_name_by_cid($) {
 };
 
 
+#############################################################
+## Retrieve channels from DVR
+#############################################################
+$result = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_channels'}(\@channels_dvr);
+
+if (scalar(@channels_dvr) == 0) {
+	logging("CRIT", "DVR amount of channels is ZERO - STOP");
+	exit 1;
+};
+
+if ((defined $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"})
+  && ($properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"} eq "1")
+) {
+	if ((! defined $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"}) 
+	    || ($properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} eq "")
+	) {
+		logging("NOTICE", "DVR channels filter enabled CA channels, but no CA group is defined (missing --wcg <group>)");
+		my %ca_groups;
+		foreach my $channel_hp (@channels_dvr) {
+			$ca_groups{$$channel_hp{'group'}}++ if ($$channel_hp{'ca'} != 0);
+		};
+		foreach my $group (sort keys %ca_groups) {
+			logging("NOTICE", "CA group candidate: " . $group . " (channels: " . $ca_groups{$group} . ")");
+		};
+		goto("END");
+	};
+};
+
+expand_dvr_channels(\@channels_dvr);
+
+my %dvr_channel_filter = (
+	'include_ca_channels'  => $config{'dvr.include-ca-channels'},
+	'whitelist_ca_groups'  => $config{'dvr.whitelist-ca-groups'}
+);
+
+filter_dvr_channels(\@channels_dvr, \@channels_dvr_filtered, \%dvr_channel_filter);
+
+logging("INFO", "DVR channels after filtering/expanding (amount: " . scalar(@channels_dvr_filtered) . "):") if ($verbose > 0);
+print_dvr_channels(\@channels_dvr_filtered);
+
+
 #######################################
 ## Retrieve channnels from service
 #######################################
@@ -965,29 +1020,6 @@ filter_service_channels(\@channels_service, \@channels_service_filtered, \%servi
 
 logging("INFO", "SERVICE channels after filtering/expanding (amount: " . scalar(@channels_service_filtered) . "):") if ($verbose > 0);
 print_service_channels(\@channels_service_filtered);
-
-
-#############################################################
-## Retrieve channels from DVR
-#############################################################
-$result = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_channels'}(\@channels_dvr);
-
-if (scalar(@channels_dvr) == 0) {
-	logging("CRIT", "DVR amount of channels is ZERO - STOP");
-	exit 1;
-};
-
-expand_dvr_channels(\@channels_dvr);
-
-my %dvr_channel_filter = (
-	'skip_ca_channels'     => $skip_ca_channels,
-	'whitelist_ca_groups'  => $whitelist_ca_groups
-);
-
-filter_dvr_channels(\@channels_dvr, \@channels_dvr_filtered, \%dvr_channel_filter);
-
-logging("INFO", "DVR channels after filtering/expanding (amount: " . scalar(@channels_dvr_filtered) . "):") if ($verbose > 0);
-print_dvr_channels(\@channels_dvr_filtered);
 
 
 ###################################################
@@ -1026,12 +1058,12 @@ my %service_cid_to_dvr_cid_map_unfiltered;
 if (defined $opt_show_channelmap_suggestions) {
 	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered, \@channels_service, \%flags_channelmap);
 
-	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered) if ($verbose > 0);
+	#print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered) if ($verbose > 0);
 
 	my $hint = 0;
 
 	# search for missing mapping (means DVR has channel, but SERVICE has not enabled)
-	foreach my $s_cid (keys %service_cid_to_dvr_cid_map_unfiltered) {
+	foreach my $s_cid (sort { $service_cid_to_dvr_cid_map_unfiltered{$a}->{'name'} cmp $service_cid_to_dvr_cid_map_unfiltered{$b}->{'name'} } keys %service_cid_to_dvr_cid_map_unfiltered) {
 		if (defined $service_cid_to_dvr_cid_map{$s_cid}->{'cid'}) {
 			# found in filtered/filtered map
 			next;
@@ -1043,7 +1075,7 @@ if (defined $opt_show_channelmap_suggestions) {
 		};
 
 		$hint = 1;
-		logging("NOTICE", "SERVICE: channel candidate to enable: " . $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'name'} . "  =>  " . get_dvr_channel_name_by_cid($service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'cid'}));
+		logging("NOTICE", "SERVICE: channel candidate to enable: " . $service_cid_to_dvr_cid_map_unfiltered{$s_cid}->{'name'});
 	};
 
 	if ($hint == 0) {
@@ -1075,7 +1107,7 @@ if (defined $opt_u) {
 };
 
 if (defined $opt_c) {
-	exit 0;
+	goto("END");
 };
 
 
@@ -1527,5 +1559,8 @@ if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) 
 } else {
 	logging("INFO", "finally nothing to do");
 };
+
+END:
+logging_shutdown();
 
 exit(0);

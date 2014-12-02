@@ -79,7 +79,7 @@ sub protocol_svdrp_get_channels($$;$) {
 	undef @$channels_ap;
 
 	if ($source eq "file") {
-		logging("DEBUG", "read SVDRP raw contents of channels from file: " . $location);
+		logging("DEBUG", "SVDRP: read raw contents of channels from file: " . $location);
 		if(!open(FILE, "<$location")) {
 			logging("ERROR", "can't read SVDR raw contents of channels from file: " . $location);
 			exit(1);
@@ -89,13 +89,13 @@ sub protocol_svdrp_get_channels($$;$) {
 			push @channels_raw, $_ unless($_ =~ /^#/o);
 		};
 		close(FILE);
-		logging("DEBUG", "VDR: amount of channels read from file: " . scalar(@channels_raw));
+		logging("DEBUG", "SVDRP: amount of channels read from file: " . scalar(@channels_raw));
 	} else {
 		my ($Dest, $Port) = split /:/, $location;
 		my $sim = 0;
 		my $verbose = 0;
 
-		logging("DEBUG", "VDR: try to read channels via SVDRP from host: $Dest:$Port");
+		logging("DEBUG", "SVDRP: try to read channels from host: $Dest:$Port");
 
 		$SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
 
@@ -103,14 +103,14 @@ sub protocol_svdrp_get_channels($$;$) {
 
 		while($_ = $SVDRP->readoneline) {
 			chomp;
-			logging("TRACE", "received raw channel line: " . $_);
+			logging("TRACE", "SVDRP: received raw channel line: " . $_);
 			push @channels_raw, $_;
 		};
 
 		$SVDRP->close;
 		
 		if (scalar(@channels_raw) == 0) {
-			logging("ERROR", "VDR: no channels received via SVDRP");
+			logging("ERROR", "SVDRP: no channels received");
 			exit 1;
 		} else {
 			logging("DEBUG", "VDR: amount of channels received via SVDRP: " . scalar(@channels_raw));
@@ -245,7 +245,7 @@ sub protocol_svdrp_get_timers($$;$) {
 	undef @$timers_ap;
 
 	if ($source eq "file") {
-		logging("DEBUG", "read SVDRP raw contents of timers from file: " . $location);
+		logging("DEBUG", "SVDRP: read raw contents of timers from file: " . $location);
 		if(!open(FILE, "<$location")) {
 			logging("ERROR", "can't read SVDR raw contents of timers from file: " . $location);
 			exit(1);
@@ -255,13 +255,13 @@ sub protocol_svdrp_get_timers($$;$) {
 			push @timers_raw, $_ unless($_ =~ /^#/o);
 		};
 		close(FILE);
-		logging("DEBUG", "VDR: amount of timers read from file: " . scalar(@timers_raw));
+		logging("DEBUG", "SVDRP: amount of timers read from file: " . scalar(@timers_raw));
 	} else {
 		my ($Dest, $Port) = split /:/, $location;
 		my $sim = 0;
 		my $verbose = 0;
 
-		logging("DEBUG", "VDR: try to read timers via SVDRP from host: $Dest:$Port");
+		logging("DEBUG", "SVDRP: try to read timers from host: $Dest:$Port");
 
 		my $SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
 
@@ -275,10 +275,10 @@ sub protocol_svdrp_get_timers($$;$) {
 		$SVDRP->close;
 
 		if (scalar(@timers_raw) == 0) {
-			logging("ERROR", "VDR: no timers received via SVDRP");
+			logging("ERROR", "SVDRP: no timers received");
 			exit 1;
 		} else {
-			logging("DEBUG", "VDR: amount of timers received via SVDRP: " . scalar(@timers_raw));
+			logging("DEBUG", "SVDRP: amount of timers received: " . scalar(@timers_raw));
 		};
 
 		
@@ -291,22 +291,33 @@ sub protocol_svdrp_get_timers($$;$) {
 			};
 
 			close(FILE);
-			logging("NOTICE", "SVDR raw contents of timers written to file written: " . $timers_file_write_raw);
+			logging("NOTICE", "SVDRP raw contents of timers written to file written: " . $timers_file_write_raw);
 		};
 	};
 
 	foreach my $line (@timers_raw) {
 		$line = encode("iso-8859-1", decode("utf8", $line));
 
-		logging("TRACE", "parse raw timer line: " . $line);
+		logging("TRACE", "SVDRP: parse raw timer line: " . $line);
 
 		last if($line =~ /^No timers defined/o);
 
 		my ($id, $temp) = split(/ /, $line, 2);
 		my ($tmstatus, $vdr_id, $dor, $start, $stop, $prio, $lft, $title, $summary) = split(/\:/, $temp, 9);
 
+		# check for supported day format
 		if ($dor !~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o) {
-			die "unsupported day format: " . $dor;
+			logging("NOTICE", "SVDRP: unsupported day format - skip tid=" . $id . " (" . $dor . ")");
+			next;
+		};
+
+		# check for active timera
+		if ($tmstatus == 9) {
+			logging("NOTICE", "SVDRP: timer is currently recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
+			next;
+		} elsif ($tmstatus != 1) {
+			logging("NOTICE", "SVDRP: timer is not active/waiting for recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
+			next;
 		};
 
 		# convert dor,start,end to unixtime
@@ -320,8 +331,7 @@ sub protocol_svdrp_get_timers($$;$) {
 			#$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		} else {
 			# shift to next day but same hh:mm
-			$dor !~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o;
-
+			$dor =~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o;
 			my ($year,$month,$day) = Add_Delta_Days($1, $2, $3, 1);
 			my $dor_stop = sprintf("%4d%02d%02d", $year, $month, $day);
 			$stop_ut  = str2time($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2) . ":00");
@@ -372,7 +382,7 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	$timers_destination_url =~ /^(file|svdrp):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported timers_destinatino_url=$timers_destination_url";
+		die "Unsupported timers_destination_url=$timers_destination_url";
 	};
 
 	my $destination = $1;

@@ -266,7 +266,7 @@ sub service_tvinfo_get_channels($$;$) {
 	};
 
 	if (scalar(keys %tvinfo_MeineSender_id_list) == 0) {
-		logging("ALERT", "No entry found for 'Meine Sender' - please check for latest version and contact asap script development");
+		logging("ALERT", "TVINFO: no entry found for 'Meine Sender' - please check for latest version and contact asap script development");
 		exit 1;
 	};
 
@@ -279,7 +279,7 @@ sub service_tvinfo_get_channels($$;$) {
 		if (defined $tvinfo_channel_name_by_id{$id}) {
 			$name = $tvinfo_channel_name_by_id{$id};
 		};
-		logging("DEBUG", "TVINFO selected station: " . sprintf("%4d: %4d %s", $c, $id, $name));
+		logging("DEBUG", "TVINFO: selected station: " . sprintf("%4d: %4d %s", $c, $id, $name));
 	};
 };
 

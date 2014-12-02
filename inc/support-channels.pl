@@ -115,18 +115,18 @@ sub filter_dvr_channels($$$) {
 	my $channels_filtered_ap = $_[1];
 	my $channel_filter_hp = $_[2];
 
-	my $opt_skip_ca_channels = 0;
-	my @opt_whitelist_ca_groups;
+	my $include_ca_channels = 0;
+	my @whitelist_ca_groups;
 
 	# check filter options
-	if (defined $$channel_filter_hp{'skip_ca_channels'}) {
-		logging("DEBUG", "option 'skip_ca_channels' specified: " . $$channel_filter_hp{'skip_ca_channels'});
-		$opt_skip_ca_channels = $$channel_filter_hp{'skip_ca_channels'};
+	if (defined $$channel_filter_hp{'include_ca_channels'}) {
+		logging("DEBUG", "CHANNELS: option 'include_ca_channels' specified: " . $$channel_filter_hp{'include_ca_channels'});
+		$include_ca_channels = $$channel_filter_hp{'include_ca_channels'};
 	};
 
 	if (defined $$channel_filter_hp{'whitelist_ca_groups'} && $$channel_filter_hp{'whitelist_ca_groups'} ne "") {
-		logging("DEBUG", "option 'whitelist_ca_groups' specified: " . $$channel_filter_hp{'whitelist_ca_groups'});
-		@opt_whitelist_ca_groups = split /,/, $$channel_filter_hp{'whitelist_ca_groups'};
+		logging("DEBUG", "CHANNELS: option 'whitelist_ca_groups' specified: " . $$channel_filter_hp{'whitelist_ca_groups'});
+		@whitelist_ca_groups = split /,/, $$channel_filter_hp{'whitelist_ca_groups'};
 	};
 
 	# run through given channels
@@ -134,14 +134,14 @@ sub filter_dvr_channels($$$) {
 		if ($$channel_hp{'ca'} ne "0") {
 			# skip non-free channels depending on option
 
-			if ($opt_skip_ca_channels ne "0") {
+			if ($include_ca_channels eq "0") {
 				# generally disabled
 				logging("DEBUG", "CHANNELS: skip DVR channel(CA): " . $$channel_hp{'name'});
 				next;
 			};
 
 			if ($$channel_filter_hp{'whitelist_ca_groups'} ne "*") {
-				if (! grep { /^$$channel_hp{'group'}$/i } @opt_whitelist_ca_groups) {
+				if (! grep { /^$$channel_hp{'group'}$/i } @whitelist_ca_groups) {
 					# group not in whitelist
 					logging("DEBUG", "CHANNELS: skip DVR channel(CA): " . $$channel_hp{'name'} . " (cA group not in whitelist: " . $$channel_hp{'group'} . ")");
 					next;
@@ -151,7 +151,7 @@ sub filter_dvr_channels($$$) {
 			# TODO blacklist others
 			if ($$channel_hp{'name'} =~ /^(Sky Select.*)$/o) {
 				# skip special channels channels depending on name and option
-				if ($opt_skip_ca_channels ne "0") {
+				if ($include_ca_channels eq "0") {
 					# generally disabled
 					logging("DEBUG", "CHANNELS: skip DVR channel(CA-like): " . $$channel_hp{'name'});
 					next;
@@ -159,7 +159,7 @@ sub filter_dvr_channels($$$) {
 			};
 		};
 
-		logging("TRACE", "copy DVR channel: " . $$channel_hp{'name'});
+		logging("TRACE", "CHANNELS: copy DVR channel: " . $$channel_hp{'name'});
 		push @$channels_filtered_ap, $channel_hp;
 	};
 };
@@ -197,7 +197,7 @@ sub print_service_channels($) {
 	};
 
 	foreach my $channel_hp (sort { $$a{'name'} cmp $$b{'name'} } @$channels_ap) {
-		logging("DEBUG", sprintf("channel  cid=%4d  enabled=%d name=%-" . $name_maxlen . "s  altnames=%s",
+		logging("DEBUG", sprintf("CHANNELS: cid=%4d  enabled=%d name=%-" . $name_maxlen . "s  altnames=%s",
 			$$channel_hp{'cid'},
 			$$channel_hp{'enabled'},
 			$$channel_hp{'name'},
@@ -208,19 +208,18 @@ sub print_service_channels($) {
 
 ###############################################################################
 ## filter DVR channels
-# 
 ###############################################################################
 sub filter_service_channels($$$) {
 	my $channels_ap = $_[0];
 	my $channels_filtered_ap = $_[1];
 	my $channel_filter_hp = $_[2];
 
-	my $opt_skip_not_enabled = 0;
+	my $skip_not_enabled = 0;
 
 	# check filter options
 	if (defined $$channel_filter_hp{'skip_not_enabled'}) {
-		logging("DEBUG", "option 'skip_not_enabled' specified: " . $$channel_filter_hp{'skip_not_enabled'});
-		$opt_skip_not_enabled = $$channel_filter_hp{'skip_not_enabled'};
+		logging("DEBUG", "CHANNEL: option 'skip_not_enabled' specified: " . $$channel_filter_hp{'skip_not_enabled'});
+		$skip_not_enabled = $$channel_filter_hp{'skip_not_enabled'};
 	};
 
 	# run through given channels
@@ -228,14 +227,14 @@ sub filter_service_channels($$$) {
 		if ($$channel_hp{'enabled'} eq "0") {
 			# skip not-enabled channels
 
-			if ($opt_skip_not_enabled ne "0") {
+			if ($skip_not_enabled ne "0") {
 				# generally disabled
-				logging("TRACE", "skip SERVICE channel(not-enabled): " . $$channel_hp{'name'});
+				logging("TRACE", "CHANNEL: skip channel(not-enabled): " . $$channel_hp{'name'});
 				next;
 			};
 		};
 
-		logging("TRACE", "copy SERVICE channel: " . $$channel_hp{'name'});
+		logging("TRACE", "CHANNEL: copy channel: " . $$channel_hp{'name'});
 		push @$channels_filtered_ap, $channel_hp;
 	};
 };
