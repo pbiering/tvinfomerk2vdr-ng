@@ -469,7 +469,7 @@ foreach my $dvr (@dvr_list_supported) {
 	if (defined $module_functions{'dvr'}->{$dvr}->{'autodetect'}) {
 		logging("DEBUG", "try to autodetect DVR: " . $dvr);
 		if ($module_functions{'dvr'}->{$dvr}->{'autodetect'}()) {
-			logging("NOTICE", "autodetected DVR: " . $dvr);
+			logging("NOTICE", "autodetected DVR type (localhost): " . $dvr);
 			$setup{'dvr'} = $dvr;
 			$config{'dvr.host'} = "localhost";
 			last;
@@ -620,6 +620,10 @@ if (defined $opt_d) {
 	# define property
 	if (defined $opt_dvr) {
 		$properties{"dvr.host." . $config{'dvr.host'} . ".type"} = $setup{'dvr'};
+	} elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".type"}) {
+		 # check/change type depending on config
+		$setup{'dvr'} = $properties{"dvr.host." . $config{'dvr.host'} . ".type"};
+		logging("NOTICE", "DVR type from config (" . $config{'dvr.host'} . "): " . $setup{'dvr'});
 	};
 };
 
@@ -1247,9 +1251,12 @@ foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timer
 		next;
 	};
 
+	my $d_cid = $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'};
+	$d_cid="n/a" if (! defined $d_cid);
+
 	logging("DEBUG", "SERVICE/DVR: possible new timer tid=" . $s_timer_num . ":"
 		. " s_cid="  . $$s_timer_hp{'cid'}
-		. " d_cid="  . $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'} 
+		. " d_cid="  . $d_cid
 		. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
 		. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
 		. " title='" . $$s_timer_hp{'title'} . "'"
@@ -1494,7 +1501,7 @@ if (scalar(keys %d_timers_action) > 0) {
 ## final preparation of SERVICE actions
 my $timers_skipped = 0;
 if (scalar(keys %s_timers_action) > 0) {
-	foreach my $s_timer_num (sort { $s_timers_action{$a} cmp $s_timers_action{$b} } sort { $a cmp $b } keys %s_timers_action) {
+	foreach my $s_timer_num (sort { $s_timers_action{$a} cmp $s_timers_action{$b} } sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timers_entries{$b}->{'start_ut'} } keys %s_timers_action) {
 		my $loglevel;
 		my $s_timer_hp = $s_timers_entries{$s_timer_num};
 
