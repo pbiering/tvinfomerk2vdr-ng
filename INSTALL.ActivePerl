@@ -9,16 +9,18 @@ Prerequisites:
 
 - downloaded package
    Browse to http://www.activestate.com/activeperl/downloads
-   transfer via SCP to destination into /tmp directory
+   Download "AS package" directly to OpenELEC
+   Transfer via SCP to destination into /tmp directory, e.g.
+   $ scp /tmp/ActivePerl-5.18.4.1803-i686-linux-64int-glibc-2.5-298573.tar.gz openelec:/tmp
 
 
 Installation
 ------------
 - extract:
-   # tar xzf /tmp/ActivePerl-5.18.2.1802-i686-linux-64int-glibc-2.5-298023.tar.gz  -C /tmp
+   # tar xzf /tmp/ActivePerl-5.18.4.1803-i686-linux-64int-glibc-2.5-298573.tar.gz -C /tmp
 - install:
-   # cd ActivePerl-5.18.2.1802-i686-linux-64int-glibc-2.5-298023/
-   # ./install
+   # cd /tmp/ActivePerl-5.18.4.1803-i686-linux-64int-glibc-2.5-298573
+   # ./install.sh
 
 Checking package...done
 
@@ -28,8 +30,8 @@ Welcome to ActivePerl
     Perl.  In order to install ActivePerl you need to agree to
     the ActivePerl is covered by the ActiveState Community License..
 
-Did you read the LICENSE.txt file? [no] yes
-Do you agree to the ActivePerl is covered by the ActiveState Community License.? [no] yes
+Did you read the LICENSE.txt file? [no] yes  <--!!!
+Do you agree to the ActivePerl is covered by the ActiveState Community License.? [no] yes  <--!!!
 
     This installer can install ActivePerl in any location of your
     choice. You do not need root privileges.  However, please make sure
@@ -42,7 +44,7 @@ Enter top level directory for install? [/opt/ActivePerl-5.18] /storage/ActivePer
     If not installed you will still be able to read all the basic perl and
     module documentation using the man or perldoc utilities.
 
-Install HTML documentation [yes] no
+Install HTML documentation [yes] no  <--!!!
 Ok.
 
     The typical ActivePerl software installation requires 200 megabytes.
@@ -68,10 +70,11 @@ contact us at <support@activestate.com>.
 Thank you for using ActivePerl!
 
 - extend paths
-   echo "export PATH=\$PATH:/storage/ActivePerl-5.18/site/bin:/storage/ActivePerl-5.18/bin" >>/storage/.profile
-   echo "export MANPATH=\$MANPATH:/storage/ActivePerl-5.18/site/man:/storage/ActivePerl-5.18/man" >>/storage/.profile
+   # echo "export PATH=\$PATH:/storage/ActivePerl-5.18/site/bin:/storage/ActivePerl-5.18/bin" >>/storage/.profile
+   # echo "export MANPATH=\$MANPATH:/storage/ActivePerl-5.18/site/man:/storage/ActivePerl-5.18/man" >>/storage/.profile
 
-- reboot to acivate paths
+- reboot to activate paths
+   # reboot
 
-- test perl binary
+- test Perl binary
     # perl -e 'print "Perl Installation OK\n";'
