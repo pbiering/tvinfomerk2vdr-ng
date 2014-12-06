@@ -17,18 +17,32 @@
 # 20140704/pb: extend debug output
 # 20140804/pb: add protection to avoid running this script as root
 # 20140804/pb: add support for -P (password hash)
+# 20141206/pb: add support for OpenELEC and new properties file
 
-if [ $UID -eq 0 ]; then
-	echo "ERROR : this script is not allowed to run as root"
-	exit 1
+if [ -f "/etc/openelec-release" ]; then
+	config_base="/storage/.config/tvinfomerk2vdr-ng"
+	program_base="/storage/tvinfomerk2vdr-ng"
+	system="openelec"
+	perl="/storage/ActivePerl-5.18/bin/perl"
+else
+	config_base="/etc/opt/tvinfomerk2vdr-ng"
+	program_base="/opt/tvinfomerk2vdr-ng"
+	system="other"
+	perl=""
+	# others, e.g. ReelBox
+	if [ $UID -eq 0 ]; then
+		echo "ERROR : this script is not allowed to run as root"
+		exit 1
+	fi
 fi
 
-config="/etc/opt/tvinfomerk2vdr-ng/users.conf"
+config="$config_base/tvinfomerk2vdr-ng-users.conf"
+properties="$config_base/tvinfomerk2vdr-ng.properties"
 
 progname="`basename "$0"`"
 
-script="$HOME/tvinfomerk2vdr/tvinfomerk2vdr-ng.pl"
-script_test="$HOME/tvinfomerk2vdr/tvinfomerk2vdr-ng-test.pl"
+script="$program_base/tvinfomerk2vdr-ng.pl"
+script_test="$program_base/tvinfomerk2vdr-ng-test.pl"
 
 if [ -e "./tvinfomerk2vdr-ng.pl" ]; then
 	script="./tvinfomerk2vdr-ng.pl"
@@ -37,8 +51,8 @@ if [ -e "./tvinfomerk2vdr-ng-test.pl" ]; then
 	script_test="./tvinfomerk2vdr-ng-test.pl"
 fi
 
-eiles_executables="script"
-files_test="config $files_executables"
+files_executables="$script"
+files_test="$config $files_executables"
 
 run_by_cron=0
 if [ ! -t 0 ]; then
@@ -71,11 +85,12 @@ Usage:
 Debug options:
 	-t	use test script $script_test
 	-p	file prefix for data files (-R/-W)
+	-s	simulate run-by-cron
 
 Debug options for called script:
-	-R	read XML data from file
-	-W	write XML data to file
-	-N	do not execute any changes on VDR timers
+	-R	read SERVICE/DVR data from file
+	-W	write SERVICE/DVR data to file
+	-N	do not execute any changes on DVR timers
 	-D	enable debugging
 	-T	enable tracing
 
@@ -99,8 +114,11 @@ END
 }
 
 # option handling
-while getopts "p:u:lXcRPTDWNthSLC:?" opt; do
+while getopts "sp:u:lXcRPTDWNthSLC:?" opt; do
 	case $opt in
+	    s)
+		run_by_cron=1
+		;;
 	    P)
 		opt_password_hash=1
 		;;
@@ -161,23 +179,19 @@ done
 
 
 for val in $files_test; do
-	if [ -z "${!val}" ]; then
-		logging "ERROR" "value empty: $val"
+	if [ ! -e "${val}" ]; then
+		logging "ERROR" "missing given file: ${val}"
 		exit 1
 	fi
-	if [ ! -e "${!val}" ]; then
-		logging "ERROR" "missing given file: ${!val} ($val)"
-		exit 1
-	fi
-	if [ ! -r "${!val}" ]; then
-		logging "ERROR" "can't read given file: ${!val} ($val)"
+	if [ ! -r "${val}" ]; then
+		logging "ERROR" "can't read given file: ${val}"
 		exit 1
 	fi
 done
 
 for val in $files_executables; do
-	if [ ! -x "${!val}" ]; then
-		logging "ERROR" "can't execute given file: ${!val} ($val)"
+	if [ ! -x "${val}" ]; then
+		logging "ERROR" "can't execute given file: ${val}"
 		exit 1
 	fi
 done
@@ -232,11 +246,25 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		logging "INFO" "run tvinfomerk2vdr-ng with username: $username (folder:$folder) and options: $script_flags"
 	fi
 
+	script_options=""
+	if [ -n "$folder" ]; then
+		script_options="$script_options -F $folder"
+	fi
+	if [ -n "$folder" ]; then
+		script_options="$script_options -P $password"
+	fi
+	if [ -n "$properties" ]; then
+		script_options="$script_options --rp $properties"
+	fi
+
 	if [ $run_by_cron -eq 0 -o -z "$email" ]; then
-		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" -P \"$password\" -F \"$folder\""
-		$script $script_flags -U "$username" -P "$password" -F "$folder" 
+		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
+		if [ $run_by_cron -eq 1 ]; then
+			script_options="$script_options -L"
+		fi
+		$perl $script $script_flags -U "$username" $script_options 
 	else
-		output="`$script $script_flags -S -L -U "$username" -P "$password" -F "$folder" 2>&1`"
+		output="`$perl $script $script_flags -S -L -U "$username" $script_options" 2>&1`"
 		if [ -n "$output" ]; then
 			echo "$output" | mail -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username" $email
 		fi

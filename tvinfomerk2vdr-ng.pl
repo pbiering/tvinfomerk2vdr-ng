@@ -103,7 +103,7 @@ our $progversion = "1.0.0";
 our $dirname = dirname($0);
 
 my $file_config = $dirname . "/config-ng.pl"; # old
-my $file_properties = $dirname . "/tvinfomerk2vdr-ng.properties";
+my $file_properties_default = $dirname . "/tvinfomerk2vdr-ng.properties";
 
 push (@INC, $dirname);
 require ("inc/logging.pl");
@@ -231,6 +231,8 @@ my %properties_descriptions = (
 my @service_users;
 my @dvr_hosts;
 
+my $file_properties;
+
 ## Logging
 my $syslog_status = 0;
 my @logging_summary;
@@ -267,8 +269,9 @@ Options:
          -S                        show summary to stdout in case of any changes or log messages > notice
          -h	                   Show this help text
          --pp	                   Print Properties (and stop)
-         --properties|rp <FILE>    Read Properties from FILE (default: $file_properties)
-         --srp                     Skip Read Properties from FILE
+         --srp	                   Skip Read Properties from default file
+         --properties|rp <FILE>    Read Properties from specifie FILE (default: read from $file_properties_default)
+         --wp [<FILE>]             Write Properties to FILE (default: $file_properties_default)
 
 Service related
          --service <name>          define SERVICE name
@@ -284,6 +287,7 @@ DVR related
          -d|--host <hostname>      DVR hostname (default: $config{'dvr.host'})
          -p <port>                 SVDRP/HTSP port number (default: 2001/9981)
          -F|--folder <folder>      folder for DVR records (default: none)
+         --dc <USER>:<PASS>        DVR Credentials (user:password) (not required for SVDRP)
 
 Channel Mapping
          -c|--scm                  Show Channel Map results (and stop)
@@ -377,9 +381,10 @@ my ($opt_read_service_from_file, $opt_read_dvr_from_file);
 my ($opt_write_service_to_file, $opt_write_dvr_to_file);
 my ($opt_show_channelmap_suggestions);
 my ($opt_prefix);
-my ($opt_print_properties, $opt_properties, $opt_skip_read_properties);
+my ($opt_print_properties, $opt_read_properties, $opt_skip_read_properties, $opt_write_properties);
 my ($opt_print_internal_config);
 my ($opt_include_ca_channels, @opt_whitelist_ca_group);
+my ($opt_dvr_credentials);
 
 
 Getopt::Long::config('bundling');
@@ -390,7 +395,8 @@ my $options_result = GetOptions (
 	"S"		=> \$opt_S,
 
 	# properties file
-	"properties|rp=s"	=> \$opt_properties,
+	"properties|rp=s"	=> \$opt_read_properties,
+	"wp:s"			=> \$opt_write_properties,
 	"pp"			=> \$opt_print_properties,
 	"srp"			=> \$opt_skip_read_properties,
 
@@ -400,6 +406,7 @@ my $options_result = GetOptions (
 	"p=i"		=> \$opt_p,
 	"F|folder=s"	=> \$opt_F,
 	"K|sdt:s"	=> \$opt_K,
+	"dc=s"		=> \$opt_dvr_credentials,
 
 	# SERVICE
 	"service=s"	=> \$opt_service,
@@ -494,24 +501,26 @@ if (! -e $file_config) {
 	$config{'service.password'} = $password if (defined $password);
 };
 
-if (defined $opt_properties) {
-	if (! -e $opt_properties) {
-		logging("ERROR", "given config file is not existing: " . $opt_properties);
+if (defined $opt_read_properties) {
+	if (! -e $opt_read_properties) {
+		logging("ERROR", "given config file is not existing: " . $opt_read_properties);
 		exit 1;
 	};
-	$file_properties = $opt_properties;
-} elsif (! -e $file_properties) {
-	logging("NOTICE", "default properties file is not existing: " . $file_properties);
+	$file_properties = $opt_read_properties;
+} elsif (! -e $file_properties_default) {
+	logging("NOTICE", "default properties file is not existing: " . $file_properties_default);
 	$file_properties = undef;
+} else {
+	$file_properties = $file_properties_default;
 };
 
 if (defined $file_properties) {
 	if (defined $opt_skip_read_properties) {
 		logging("NOTICE", "read of properties file is disabled by option");
 	} else {
-		logging("INFO", "try reading configuration from file: " . $file_properties);
+		logging("INFO", "try reading properties from file: " . $file_properties);
 		if(!open(FILE, "<$file_properties")) {
-		logging("ERROR", "can't read configuration from file: " . $file_properties);
+		logging("ERROR", "can't read properties from file: " . $file_properties);
 			exit(1);
 		};
 
@@ -535,7 +544,7 @@ if (defined $file_properties) {
 				logging("WARN", "skip unparsable line in config file[" . $lc . "]: " . $_);
 			};
 		};
-		logging("INFO", "finished reading configuration from file: " . $file_properties);
+		logging("INFO", "finished reading properties from file: " . $file_properties);
 
 		# check for service_users
 		foreach my $entry (grep /^service\.tvinfo\.user\./o, keys %properties) {
@@ -723,7 +732,7 @@ if ((! defined $config{'service.user'}) || ($config{'service.user'} eq "")) {
 		$info = " potential users found in properties: " . join(" ", @service_users);
 	};
 	logging("ERROR", "SERVICE username not defined (use -U)" .  $info);
-	exit 1;
+	exit 1 if (! defined $opt_print_properties);
 } elsif ($config{'service.user'} eq "<TODO>") {
 	logging("ERROR", "SERVICE username not explicitly given, still default: " . $config{'service.user'});
 	exit 1;
@@ -734,25 +743,27 @@ if ($opt_P) {
 	$config{'service.password'} = $opt_P;
 };
 
-if (defined $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"}) {
-	$config{'service.password'} = $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"};
-	logging("DEBUG", "found SERVICE password for username in properties: " . $config{'service.password'});
-};
-
-if ($config{'service.source.type'} ne "file") {
-	if ((! defined $config{'service.password'}) || ($config{'service.password'} eq "")) {
-		logging("ERROR", "SERVICE password not defined (use -P or specify in properties file for user: ". $config{'service.user'} . ")");
-		exit 1;
-	} elsif ($config{'service.password'} eq "<TODO>") {
-		logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.password'});
-		exit 1;
+if (defined $config{'service.user'}) {
+	if (defined $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"}) {
+		$config{'service.password'} = $properties{'service.' . $setup{'service'} . ".user." . $config{'service.user'} . ".password"};
+		logging("DEBUG", "found SERVICE password for username in properties: " . $config{'service.password'});
 	};
 
-	if ($setup{'service'} eq "tvinfo") {
-		# TODO: move such option checks in service module
-		if ($config{'service.password'} !~ /^{MD5}/) {
-			logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
-			$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
+	if ($config{'service.source.type'} ne "file") {
+		if ((! defined $config{'service.password'}) || ($config{'service.password'} eq "")) {
+			logging("ERROR", "SERVICE password not defined (use -P or specify in properties file for user: ". $config{'service.user'} . ")");
+			exit 1;
+		} elsif ($config{'service.password'} eq "<TODO>") {
+			logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.password'});
+			exit 1;
+		};
+
+		if ($setup{'service'} eq "tvinfo") {
+			# TODO: move such option checks in service module
+			if ($config{'service.password'} !~ /^{MD5}/) {
+				logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
+				$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
+			};
 		};
 	};
 };
@@ -782,7 +793,7 @@ if (defined $opt_F) {
 # defaults for read/write raw files
 my $prefix = "";
 $prefix = $opt_prefix . "-" if (defined $opt_prefix);
-$config{'service.source.file.prefix'}  = $dirname . "/" . $prefix . "service-" . $setup{'service'} . "-" . $config{'service.user'};
+$config{'service.source.file.prefix'}  = $dirname . "/" . $prefix . "service-" . $setup{'service'} . "-" . $config{'service.user'} if (defined $config{'service.user'});
 $config{'dvr.source.file.prefix'} = $dirname . "/" . $prefix . "dvrhost-" . $config{'dvr.host'};
 
 if (! defined $config{'dvr.host'}) {
@@ -804,6 +815,16 @@ if (scalar(@opt_whitelist_ca_group) > 0) {
 	$config{'dvr.whitelist-ca-groups'} = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
 } elsif (defined $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"}) {
 	$config{'dvr.whitelist-ca-groups'} = $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"};
+};
+
+
+## DVR credentials
+if ((defined $opt_dvr_credentials) && ($opt_dvr_credentials ne "")) {
+	$properties{"dvr.host." . $config{'dvr.host'} . ".credentials"} = $opt_dvr_credentials;
+};
+
+if (defined $properties{"dvr.host." . $config{'dvr.host'} . ".credentials"}) {
+	$config{'dvr.credentials'} = $properties{"dvr.host." . $config{'dvr.host'} . ".credentials"};
 };
 
 
@@ -838,27 +859,28 @@ if (! defined $setup{'dvr'}) {
 ###############################################################################
 # Applying default properties
 ###############################################################################
-## priority
-if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'}) {
-	$config{'dvr.priority'} = $properties{'dvr.service-user.default.priority'};
-} else {
-	$config{'dvr.priority'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'};
-};
+if (defined $config{'service.user'}) {
+	## priority
+	if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'}) {
+		$config{'dvr.priority'} = $properties{'dvr.service-user.default.priority'};
+	} else {
+		$config{'dvr.priority'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.priority'};
+	};
 
-## lifetime
-if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'}) {
-	$config{'dvr.lifetime'} = $properties{'dvr.service-user.default.lifetime'};
-} else {
-	$config{'dvr.lifetime'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'};
-};
+	## lifetime
+	if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'}) {
+		$config{'dvr.lifetime'} = $properties{'dvr.service-user.default.lifetime'};
+	} else {
+		$config{'dvr.lifetime'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.lifetime'};
+	};
 
-## folder
-if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'}) {
-	$config{'dvr.folder'} = $properties{'dvr.service-user.default.folder'};
-} else {
-	$config{'dvr.folder'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'};
+	## folder
+	if (! defined $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'}) {
+		$config{'dvr.folder'} = $properties{'dvr.service-user.default.folder'};
+	} else {
+		$config{'dvr.folder'} = $properties{'dvr.service-user.' . $config{'service.user'} . '.folder'};
+	};
 };
-
 
 
 ###############################################################################
@@ -879,12 +901,15 @@ if (! defined $config{"dvr.margin.stop"}) {
 
 
 ###############################################################################
-# Print Properties / internal configuration
+# Print/Write Properties / and print internal configuration
 ###############################################################################
-if (defined $opt_print_properties) {
-	logging("NOTICE", "=" x5 . "print of properties (configuration) begin");
-	print "### $progname/$progversion configuration\n";
-	print "###  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime()) . "\n";
+if ((defined $opt_print_properties) || (defined $opt_write_properties)) {
+	# create array of lines
+	
+	my @lines;
+
+	push @lines, "### $progname/$progversion configuration";
+	push @lines, "###  created " . strftime("%Y%m%d-%H%M%S-%Z", localtime());
 
 	my $description = "";
 	my $description_old = "";
@@ -900,16 +925,49 @@ if (defined $opt_print_properties) {
 
 		if ((defined $description) && ($description_old ne $description) && ($description ne "")) {
 			$description_old = $description;
-			printf "\n";
-			printf "## %s\n", $description;
+			push @lines, "";
+			push @lines, "## " . $description;
 		};
 
 		my $value = $properties{$property};
 		$value = "" if (! defined $properties{$property});
-		printf "%s=%s\n", $property, $value;
+		push @lines, $property . "=" . $value;
 	};
 
-	logging("NOTICE", "=" x5 . "print of properties (configuration) end");
+	if (defined $opt_print_properties) {
+		logging("NOTICE", "=" x5 . "print of properties (configuration) begin") if (defined $opt_print_properties);
+		foreach my $line (@lines) {
+			print $line . "\n";
+		};
+		logging("NOTICE", "=" x5 . "print of properties (configuration) end") if (defined $opt_print_properties);
+	};
+
+	if (defined $opt_write_properties) {
+		if ($opt_write_properties eq "") {
+			logging("NOTICE", "no dedicated file given to write properties, use default: " . $file_properties_default);
+			$file_properties = $file_properties_default;
+		} else {
+			$file_properties = $opt_write_properties;
+		};
+
+		if (-e $opt_write_properties) {
+			logging("NOTICE", "properties file already exists, will overwrite it now: " . $opt_write_properties);
+		};
+
+		if(!open(FILE, ">$file_properties")) {
+		logging("ERROR", "can't open file to write properties: " . $file_properties);
+			exit(1);
+		};
+
+		logging("DEBUG", "write properties to file: " . $file_properties);
+
+		foreach my $line (@lines) {
+			print FILE $line . "\n" || die "problem writing to file: $file_properties";
+		};
+
+		close(FILE);
+		logging("INFO", "finished writing properties to file: " . $file_properties);
+	};
 };
 
 if (defined $opt_print_internal_config) {
@@ -928,9 +986,21 @@ if (defined $opt_print_internal_config) {
 	logging("NOTICE", "print of internal config end");
 };
 
-if ((defined $opt_print_properties) || (defined $opt_print_internal_config)) {
-	exit(0);
+
+if ((defined $opt_print_properties) || (defined $opt_print_internal_config) || (defined $opt_write_properties)) {
+	goto("END");
 };
+
+
+#############################################################
+#############################################################
+# Last failsafe checks
+#############################################################
+if (! defined $config{'service.user'}) {
+	logging("ERROR", "SERVICE username not defined (use -U)");
+	exit(1);
+};
+
 
 #############################################################
 #############################################################
@@ -1559,7 +1629,7 @@ if (scalar(keys %s_timers_action) > 0) {
 
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
-	logging(($rc > 0) ? "WARN" : "INFO", "result of DVR create/update/delete: " . $rc);
+	logging(($rc > 0) ? "WARN" : "INFO", "result of DVR create/update/delete: " . (($rc == 0) ? "OK" : $rc));
 	logging("NOTICE", "dry-run mode selected (-N) - no changes applied to DVR!") if (defined $opt_N);
 	logging("WARN", "timers skipped: " . $timers_skipped) if ($timers_skipped > 0);
 } else {

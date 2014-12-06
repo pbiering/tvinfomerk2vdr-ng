@@ -10,13 +10,26 @@ Prerequisites
 Installation
 ------------
 - unpack (this automatically creates the subdirectory)
-	unzip -d /storage /tmp/tvinfomerk2vdr-ng.zip
+    # unzip -d /storage /tmp/tvinfomerk2vdr-ng.zip
 
+Create Configuration directory
+------------------------------
+    # mkdir /storage/.config/tvinfomerk2vdr-ng
 
 Configuration
 -------------
 - change to destination directory
-	cd /storage/tvinfomerk2vdr-ng
-	cd /storage/tvinfomerk2vdr-ng-devel (in case of devel branch)
+    # cd /storage/tvinfomerk2vdr-ng
+    # cd /storage/tvinfomerk2vdr-ng-devel (in case of devel branch)
 
 see now CONFIGURATION
+
+
+Creation of Cron-Job
+--------------------
+(busybox cron will not support @reboot)
+
+every 30 minutes
+$ echo "*/30 * * * * /storage/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh" >>/storage/.cache/cron/crontabs/root
+
+(for debugging, use /sbin/crond -f -d 0)

@@ -14,6 +14,9 @@ Installation
 - unpack (this automatically creates the subdirectory)
 	unzip -d /opt /tmp/tvinfomerk2vdr-ng.zip
 
+Create Configuration directory
+------------------------------
+    # mkdir /etc/opt/tvinfomerk2vdr-ng
 
 Configuration
 -------------

@@ -1,7 +1,0 @@
-### Configuration file for script: tvinfomerk2vdr-ng-wrapper.sh
-#
-## Hashed TVinfo-Password can be generated using: ./tvinfomerk2vdr-ng-wrapper.sh -P
-#
-## Email is optional, if defined the output will be send to receipient
-#
-#TVinfo-User:TVinfo-Password (raw or as hash):Folder:Email (optional)

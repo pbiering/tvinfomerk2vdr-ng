@@ -17,7 +17,7 @@ If channels (aka stations or "Meine Sender") are proper configured, following re
 
 Notes:
 - in case of autodetection is not working, try to use --dvr vdr|tvheadend
-- in case of DVR is not local installed, use -d <DVR host>
+- in case of DVR is not locally installed, use -d <DVR host>
 
 
 Channel Map Result:
@@ -58,8 +58,11 @@ If e.g. following is shwon, check messages on NOTICE|WARN level for reason:
 
 Store configuration into default properties file:
 -----------------------------------------
-$ mv tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -F <folder> --pp >tvinfomerk2vdr-ng.properties
+Create backup
+$ cp tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
+
+Write (updated) config
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -F <folder> --wp
 
 
 Run again using default properties file:
@@ -76,3 +79,28 @@ $ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -L
 Output messages should appear now in syslog
 - reelbox: /var/log/messages
 - openelec: only remote syslog after creating a remote log forwarder
+
+
+For onging execution by cron the wrapper needs to be configure now
+------------------------------------------------------------------
+Move properties file to created one during INSTALL
+ $ mv tvinfomerk2vdr-ng.properties CONFIGSTORAGEPATH
+
+Copy example file
+ $ cp tvinfomerk2vdr-ng-users.conf.example CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
+ 
+Add users
+ $  perl ./tvinfomerk2vdr-ng.pl --pp --rp CONFIGSTORAGEPATH/tvinfomerk2vdr-ng.properties | egrep "^service\.tvinfo\.user\..+\.password" | awk -F. '{ print $4 "::::" }' >>CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
+age/.config/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-users.conf
+
+List users
+ $ ./tvinfomerk2vdr-ng-wrapper.sh -l
+INFO  : list users
+INFO  : List entry: USER:
+
+Run with user (dry-run, but everthing should look fine)
+ $ ./tvinfomerk2vdr-ng-wrapper.sh -u USER -N
+
+Run without specifying a user (more than one user can be configured)
+ $ ./tvinfomerk2vdr-ng-wrapper.sh -N
+

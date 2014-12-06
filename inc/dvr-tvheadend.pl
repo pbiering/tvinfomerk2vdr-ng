@@ -253,7 +253,7 @@ sub dvr_tvheadend_get_timers($) {
 	if ($config{'dvr.source.type'} eq "file") {
 		$timers_source_url = "file://" . $timers_file;
 	} else {
-		$timers_source_url = "http://" . $config{'dvr.host'} . ":" . $port . "/dvrlist_upcoming";
+		$timers_source_url = "http://" . $config{'dvr.host'} . ":" . $port . "/dvrlist_upcoming?limit=9999";
 		if ($config{'dvr.source.type'} eq "network+store") {
 			$file = $timers_file;
 		};

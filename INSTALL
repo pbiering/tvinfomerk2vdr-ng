@@ -5,7 +5,7 @@ Prerequisites:
 --------------
 - download package as ZIP from https://github.com/pbiering/tvinfomerk2vdr-ng/
    e.g. (for branch devel)
-	curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/devel
+	# curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/devel
 
 Installation
 ------------

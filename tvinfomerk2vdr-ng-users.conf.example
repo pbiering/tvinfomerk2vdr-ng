@@ -1,0 +1,9 @@
+### Configuration file for script: tvinfomerk2vdr-ng-wrapper.sh
+#
+## SERVICE-Password is optional if already stored in properties file
+##  TVinfo hash can be created using tvinfomerk2vdr-ng-wrapper.sh -P
+## Folder is optional if already stored in properties file
+##
+## Email is optional, if defined the output will be send to receipient
+#
+#SERVICE-User:SERVICE-Password (raw or as hash - optional):Folder (optional):Email (optional)

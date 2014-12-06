@@ -33,6 +33,7 @@ $htsp_client->agent("Mozilla/4.0 (tvinfomerk2vdr-ng)");
 our %traceclass;
 our %debugclass;
 
+our %config;
 
 ################################################################################
 ################################################################################
@@ -60,7 +61,14 @@ sub protocol_htsp_get_generic($$;$) {
 		$$contents_json_p = <FILE>;
 		close(FILE);
 	} else {
-		my $response = $htsp_client->request(GET "$source_url");
+		my $req = HTTP::Request->new(GET => $source_url);
+
+		if (defined $config{'dvr.credentials'}) {
+			my ($user, $pass) = split ":",$config{'dvr.credentials'};
+			$req->authorization_basic($user, $pass);
+		};
+
+		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch via HTSP: " . $source_url . ($response->status_line));
@@ -134,7 +142,14 @@ sub protocol_htsp_get_channels($$;$) {
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
-		my $response = $htsp_client->request(GET "$channels_source_url");
+		my $req = HTTP::Request->new(GET => $channels_source_url);
+
+		if (defined $config{'dvr.credentials'}) {
+			my ($user, $pass) = split ":",$config{'dvr.credentials'};
+			$req->authorization_basic($user, $pass);
+		};
+
+		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch channels(services) via HTSP: " . $response->status_line);
@@ -281,7 +296,14 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
-		my $response = $htsp_client->request(GET "$channels_source_url");
+		my $req = HTTP::Request->new(GET => $channels_source_url);
+
+		if (defined $config{'dvr.credentials'}) {
+			my ($user, $pass) = split ":",$config{'dvr.credentials'};
+			$req->authorization_basic($user, $pass);
+		};
+
+		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch channels(services) via HTSP: " . $response->status_line);
@@ -448,8 +470,14 @@ sub protocol_htsp_get_adapters($$;$) {
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
+		my $req = HTTP::Request->new(GET => $adapters_source_url);
 
-		my $response = $htsp_client->request(GET "$adapters_source_url");
+		if (defined $config{'dvr.credentials'}) {
+			my ($user, $pass) = split ":",$config{'dvr.credentials'};
+			$req->authorization_basic($user, $pass);
+		};
+
+		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch adapters via HTSP: " . $response->status_line);
@@ -749,8 +777,14 @@ sub protocol_htsp_get_timers($$;$) {
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
+		my $req = HTTP::Request->new(GET => $timers_source_url);
 
-		my $response = $htsp_client->request(GET "$timers_source_url");
+		if (defined $config{'dvr.credentials'}) {
+			my ($user, $pass) = split ":",$config{'dvr.credentials'};
+			$req->authorization_basic($user, $pass);
+		};
+
+		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch timers via HTSP: " . $response->status_line);
@@ -885,13 +919,13 @@ sub protocol_htsp_delete_add_timers($$) {
 		push @commands_htsp, "POST /dvr/addentry"
 			. "?op=createEntry"
 			. "&channelid="   . $$timer_hp{'cid'}
-			. "&date="        . strftime("%m/%d/%Y", gmtime($$timer_hp{'start_ut'}))
-			. "&starttime="   . strftime("%H:%M"   , gmtime($$timer_hp{'start_ut'}))
-			. "&stoptime="    . strftime("%H:%M"   , gmtime($$timer_hp{'stop_ut'}))
-			# according to tests at least on openelec timezone of tvheadend is UTC if system has UTC
-			#. "&date="        . strftime("%m/%d/%Y", localtime($$timer_hp{'start_ut'}))
-			#. "&starttime="   . strftime("%H:%M", localtime($$timer_hp{'start_ut'})) 
-			#. "&stoptime="    . strftime("%H:%M", localtime($$timer_hp{'stop_ut'}))
+			# TODO: detect whether UTC or localtime is used according to tests at least on openelec timezone of tvheadend is UTC if system has UTC
+			#. "&date="        . strftime("%m/%d/%Y", gmtime($$timer_hp{'start_ut'}))
+			#. "&starttime="   . strftime("%H:%M"   , gmtime($$timer_hp{'start_ut'}))
+			#. "&stoptime="    . strftime("%H:%M"   , gmtime($$timer_hp{'stop_ut'}))
+			. "&date="        . strftime("%m/%d/%Y", localtime($$timer_hp{'start_ut'}))
+			. "&starttime="   . strftime("%H:%M", localtime($$timer_hp{'start_ut'})) 
+			. "&stoptime="    . strftime("%H:%M", localtime($$timer_hp{'stop_ut'}))
 			. "&pri="         . $$timer_hp{'priority'}
 			. "&config_name=" . $$timer_hp{'config'}
 			. "&title="       . $$timer_hp{'title'}
@@ -915,16 +949,17 @@ sub protocol_htsp_delete_add_timers($$) {
 
 			my ($cmd, $uri, $options) = $line =~ /^([^ ]+) ([^?]+)\?(.*)$/o;
 
-			my %options_h;
-			foreach my $option (split("&", $options)) {
-				my ($key, $value) = split("=", $option);
-				$options_h{$key} = $value;
+			my $req = HTTP::Request->new(GET => $timers_destination_url . $uri . "?" . $options);
+
+			if (defined $config{'dvr.credentials'}) {
+				my ($user, $pass) = split ":",$config{'dvr.credentials'};
+				$req->authorization_basic($user, $pass);
 			};
-			
-			my $response = $htsp_client->request(POST $timers_destination_url . $uri, \%options_h);
+
+			my $response = $htsp_client->request($req);
 
 			if (! $response->is_success) {
-				logging("ERROR", "Can't add/delete timer via HTSP: " . $response->status_line);
+				logging("ERROR", "Problem configuring DVR via HTSP: " . $response->status_line);
 				exit 1;
 			};
 
@@ -934,26 +969,26 @@ sub protocol_htsp_delete_add_timers($$) {
 
 			if ($line =~ /op=cancelEntry/o) {
 				if ($result =~ m/success/o) {
-					logging("INFO", "HTSP: delete of timer was successful: " . $result);
+					logging("INFO", "HTSP: delete of timer was successful: " . $line);
 					$counters{'del'}++;
 				} else {
-					logging("ERROR", "HTSP: delete of timer was not successful: " . $result);
+					logging("ERROR", "HTSP: delete of timer was not successful: " . $line . " (" . $result . ")");
 					$counters{'delete-failed'}++;
 				};
 			} elsif ($line =~ /op=createEntry/o) {
 				if ($result =~ m/success/o) {
-					logging("INFO", "HTSP: successful programmed timer: $result");
+					logging("INFO", "HTSP: successful programmed timer: " . $line);
 					$counters{'add'}++;
 				} else {
-					logging("ERROR", "HTSP: problem programming new timer: $result");
+					logging("ERROR", "HTSP: problem programming new timer: " . $line . " (" . $result . ")");
 					$counters{'add-failed'}++;
 				};
 			} elsif ($line =~ /op=saveSettings/o) {
 				if ($result =~ m/success/o) {
-					logging("INFO", "HTSP: successful created/updated configuration: $result");
+					logging("INFO", "HTSP: successful created/updated configuration: " . $line);
 					$counters{'config'}++;
 				} else {
-					logging("ERROR", "HTSP: problem creating/updating configuration: $result");
+					logging("ERROR", "HTSP: problem creating/updating configuration: " . $line . " (" . $result . ")");
 					$counters{'config-failed'}++;
 				};
 			} else {
