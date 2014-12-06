@@ -430,7 +430,7 @@ my $options_result = GetOptions (
 	"rdff"		=> \$opt_read_dvr_from_file,
 	"wstf"		=> \$opt_write_service_to_file,
 	"wdtf"		=> \$opt_write_dvr_to_file,
-	"prefix"	=> \$opt_prefix,
+	"prefix=s"	=> \$opt_prefix,
 	"pic"		=> \$opt_print_internal_config,
 
 	"O|property=s@"	=> \@opt_properties,
@@ -780,12 +780,10 @@ if (defined $opt_F) {
 
 ## --prefix
 # defaults for read/write raw files
-$config{'service.source.file.prefix'}  = $dirname . "/" . "service-" . $setup{'service'} . "-" . $config{'service.user'};
-$config{'dvr.source.file.prefix'} = $dirname . "/" . "dvrhost-" . $config{'dvr.host'};
-if (defined $opt_prefix) {
-	$config{'dvr.source.file.prefix'} = $opt_prefix . "-" . $config{'dvr.source.file.prefix'};
-	$config{'service.source.file.prefix'} = $opt_prefix. "-" . $config{'service.source.file.prefix'};
-};
+my $prefix = "";
+$prefix = $opt_prefix . "-" if (defined $opt_prefix);
+$config{'service.source.file.prefix'}  = $dirname . "/" . $prefix . "service-" . $setup{'service'} . "-" . $config{'service.user'};
+$config{'dvr.source.file.prefix'} = $dirname . "/" . $prefix . "dvrhost-" . $config{'dvr.host'};
 
 if (! defined $config{'dvr.host'}) {
 	logging("ERROR", "DVR host not specified (and unable to autodetect)");

@@ -127,7 +127,7 @@ sub dvr_tvheadend_get_channels($) {
 	## run through adapters and get all channels
 	foreach my $adapter_hp (@adapters) {
 		## preparation for fetching channels
-		my $channels_per_adapter_file = $config{'dvr.host'} . "-dvb-services" . $$adapter_hp{'identifier'} . ".json";
+		my $channels_per_adapter_file = $config{'dvr.source.file.prefix'} . "-dvb-services" . $$adapter_hp{'identifier'} . ".json";
 		my $channels_per_adapter_source_url;
 
 		$file = undef;
