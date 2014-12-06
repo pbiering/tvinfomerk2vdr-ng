@@ -2,9 +2,13 @@ tvinfomerk2vdr-ng/Test Scenarios
 ================================
 
 Currently tested:
+
 x VDR on ReelBox using DVB-C
+	x CA channel detection
+
 x TVheadend on OpenELEC using DVB-T
 
+x TVheadend with DVB-C
+	x CA channel detection
+
 TODO:
-o TVheadend with DVB-C
-	o CA channel detection
