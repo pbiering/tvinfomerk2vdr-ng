@@ -241,6 +241,7 @@ sub protocol_htsp_get_channels($$;$) {
 #                           'typestr' => 'SDTV',
 #                           'sid' => 2,
 #                           'type' => 'SDTV (0x0001)'
+#                           'encryption' => 'BetaCrypt',
 #                         },
 #
 # sid	Service ID
@@ -343,7 +344,7 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 			# check: enabled
 			if ($$entry{'enabled'} !~ /^1$/o) {
 				# skip if not enabled)
-				print "TRACE : found channelname=" . $$entry{'channelname'} . " but skip (no 'typestr')\n" if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} && 0x2000));
+				logging("TRACE", "HTSP: found channelname=" . $$entry{'channelname'} . " but skip (no 'typestr')") if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} && 0x2000));
 				next;
 			};
 
@@ -353,15 +354,20 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 				$type =~ s/TV$//o;
 			} else {
 				# skip if not supported: type
-				print "TRACE : found channelname=" . $$entry{'channelname'} . " but skip (not enabled)\n" if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} && 0x4000));
+				logging("TRACE", "HTSP: found channelname=" . $$entry{'channelname'} . " but skip (not enabled)") if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} && 0x4000));
 				next;
 			};
+
+			my $ca = 0;
+			$ca = 1 if ((defined $$entry{'encryption'}) && ($$entry{'encryption'} ne "")); 
 
 			logging("TRACE", "found channel name='" . $name . "'"
 				. " type=" . $type
 				. " sid="  . $$entry{'sid'}
 				. " pmt="  . $$entry{'pmt'}
 				. " pcr="  . $$entry{'pcr'}
+				. " ca="   . $ca
+				. " group='". $$entry{'provider'} . "'"
 			);
 
 			push @$channels_p, {
@@ -370,7 +376,7 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 				'source'   => $channel_source,
 				'altnames' => "",
 				'type'     => $type,
-				'ca'       => 0, # TODO check for CA information
+				'ca'       => $ca,
 				'sid'      => $$entry{'sid'},
 				'group'    => $$entry{'provider'}
 			};

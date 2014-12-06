@@ -1,0 +1,10 @@
+tvinfomerk2vdr-ng/TODO
+======================
+
+DVR: all
+o add support for blacklist for channel suggestions
+
+DVR: TVheadend
+o TVheadend CA channel filtering in case of channel appears more than once (multible receivers)
+o test with newer versions of TVheadend
+o use native HTSP instead of HTTP to extjs

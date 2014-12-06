@@ -106,6 +106,8 @@ sub dvr_tvheadend_get_channels($) {
 	my $adapters_file = $config{'dvr.source.file.prefix'} . "-tv-adapter.json";
 	my $channels_file = $config{'dvr.source.file.prefix'} . "-channels.json";
 
+	my %channels_via_adapter;
+
 	## preparation for fetching adapters
 	$file = undef;
 	if ($config{'dvr.source.type'} eq "file") {
@@ -141,6 +143,14 @@ sub dvr_tvheadend_get_channels($) {
 		};
 
 		$result = protocol_htsp_get_channels_per_adapter($channels_ap, $channels_per_adapter_source_url, $$adapter_hp{'deliverySystem'}, $file);
+
+		## run through channels and create hash with important information
+		foreach my $channel_hp (@$channels_ap) {
+			if (! defined $channels_via_adapter{$$channel_hp{'name'}}) {
+				$channels_via_adapter{$$channel_hp{'name'}}->{'ca'} = $$channel_hp{'ca'};
+				$channels_via_adapter{$$channel_hp{'name'}}->{'group'} = $$channel_hp{'group'};
+			};
+		};
 	};
 
 	## get channels
@@ -155,9 +165,18 @@ sub dvr_tvheadend_get_channels($) {
 	};
 	$result = protocol_htsp_get_channels($channels_ap, $channels_source_url, $file);
 
-	## run through channels and apply filter (TODO)
-	#foreach my $channel_hp (@$channels_ap) {
-	#};
+	## run through channels and apply information retrieved via adapters
+	foreach my $channel_hp (@$channels_ap) {
+		if (defined $channels_via_adapter{$$channel_hp{'name'}}) {
+			if (defined $channels_via_adapter{$$channel_hp{'name'}}->{'ca'}) {
+				$$channel_hp{'ca'} = $channels_via_adapter{$$channel_hp{'name'}}->{'ca'};
+			};
+
+			if (defined $channels_via_adapter{$$channel_hp{'name'}}->{'group'}) {
+				$$channel_hp{'group'} = $channels_via_adapter{$$channel_hp{'name'}}->{'group'};
+			};
+		};
+	};
 };
 
 

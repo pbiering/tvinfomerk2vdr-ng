@@ -717,7 +717,7 @@ if ($opt_U) {
 	$config{'service.user'} = $opt_U;
 };
 
-if (! defined $config{'service.user'}) {
+if ((! defined $config{'service.user'}) || ($config{'service.user'} eq "")) {
 	my $info = "";
 	if (scalar(@service_users) > 0) {
 		$info = " potential users found in properties: " . join(" ", @service_users);
@@ -1084,7 +1084,7 @@ if (defined $opt_show_channelmap_suggestions) {
 		logging("NOTICE", "SERVICE: no channel candidates found to enable - looks like all possible channels are configured");
 	};
 
-	exit 0;
+	goto("END");
 };
 
 
