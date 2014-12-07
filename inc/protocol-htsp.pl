@@ -896,7 +896,7 @@ sub protocol_htsp_delete_add_timers($$) {
 
 	# create/update configs
 	foreach my $config_hp (@$config_add_update_ap) {
-		push @commands_htsp, "POST /dvr"
+		push @commands_htsp, "GET /dvr"
 			. "?op=saveSettings"
 			. "&config_name="   . $$config_hp{'identifier'}
 			. "&storage="       . $$config_hp{'storage'}
@@ -910,13 +910,13 @@ sub protocol_htsp_delete_add_timers($$) {
 	
 	# delete timers
 	foreach my $num (@$timers_num_delete_ap) {
-		push @commands_htsp, "POST /dvr?entryId=" . $num . "&op=cancelEntry";
+		push @commands_htsp, "GET /dvr?entryId=" . $num . "&op=cancelEntry";
 		$counters{'del'}++ if ($destination eq "file");
 	};
 
 	# add timers
 	foreach my $timer_hp (@$timers_add_ap) {
-		push @commands_htsp, "POST /dvr/addentry"
+		push @commands_htsp, "GET /dvr/addentry"
 			. "?op=createEntry"
 			. "&channelid="   . $$timer_hp{'cid'}
 			# TODO: detect whether UTC or localtime is used according to tests at least on openelec timezone of tvheadend is UTC if system has UTC
