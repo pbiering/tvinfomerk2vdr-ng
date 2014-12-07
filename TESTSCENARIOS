@@ -7,6 +7,7 @@ x VDR on ReelBox using DVB-C
 	x CA channel detection
 
 x TVheadend on OpenELEC using DVB-T
+	x using user/pass to connect (-dc <USER>:<PASS>)
 
 x TVheadend with DVB-C
 	x CA channel detection
