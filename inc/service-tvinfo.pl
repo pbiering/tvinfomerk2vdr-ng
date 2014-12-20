@@ -169,7 +169,7 @@ sub service_tvinfo_get_channels($$;$) {
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
 			if(! open(FILE, ">$WriteStationsXML")) {
-				logging("ERROR", "TVINFO: can't write XML contents of stations to file: " $WriteStationsXML . " (" . $! . ")");
+				logging("ERROR", "TVINFO: can't write XML contents of stations to file: " . $WriteStationsXML . " (" . $! . ")");
 			} else {
 				print FILE $xml_raw;
 				close(FILE);
@@ -366,7 +366,7 @@ sub service_tvinfo_get_timers($) {
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
 			if (! open(FILE, ">$WriteScheduleXML")) {
-				logging("ERROR", "TVINFO: can't write XML contents of timers to file: " $WriteScheduleXML . " (" . $! . ")");
+				logging("ERROR", "TVINFO: can't write XML contents of timers to file: " . $WriteScheduleXML . " (" . $! . ")");
 			} else {
 				print FILE $xml_raw;
 				close(FILE);
