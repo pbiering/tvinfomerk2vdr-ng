@@ -119,7 +119,7 @@ sub protocol_svdrp_get_channels($$;$) {
 		if (defined $channels_file_write_raw) {
 			logging("NOTICE", "SVDRP write raw channels contents to file: " . $channels_file_write_raw);
 			if (!open(FILE, ">$channels_file_write_raw")) {
-				logging("ERROR", "SVDR: can't write raw contents of channels to file: ". $$channels_file_write_raw . " (" . $! . ")");
+				logging("ERROR", "SVDR: can't write raw contents of channels to file: ". $channels_file_write_raw . " (" . $! . ")");
 			} else {
 				foreach my $line (@channels_raw) {
 					print FILE $line . "\n";
@@ -287,7 +287,7 @@ sub protocol_svdrp_get_timers($$;$) {
 		if (defined $timers_file_write_raw) {
 			logging("NOTICE", "SVDRP write raw timers contents to file: " . $timers_file_write_raw);
 			if (! open(FILE, ">$timers_file_write_raw")) {
-				logging("ERROR", "SVDRP: can't open file for writing raw contents of timers: " . $$timers_file_write_raw . " (" . $! . ")");
+				logging("ERROR", "SVDRP: can't open file for writing raw contents of timers: " . $timers_file_write_raw . " (" . $! . ")");
 			} else {
 				foreach my $line (@timers_raw) {
 					print FILE $line . "\n";

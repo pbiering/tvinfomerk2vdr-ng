@@ -1046,7 +1046,7 @@ if ((defined $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channe
 	if ((! defined $properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"}) 
 	    || ($properties{"dvr.host." . $config{'dvr.host'} . ".whitelist-ca-groups"} eq "")
 	) {
-		logging("NOTICE", "DVR channels filter enabled CA channels, but no CA group is defined (missing --wcg <group>)");
+		logging("NOTICE", "DVR channels filter enabled CA channels, but no CA group is defined (missing --wcg <group> or --wcg '*')");
 		my %ca_groups;
 		foreach my $channel_hp (@channels_dvr) {
 			$ca_groups{$$channel_hp{'group'}}++ if ($$channel_hp{'ca'} != 0);
