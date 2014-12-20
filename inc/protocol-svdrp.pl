@@ -113,19 +113,21 @@ sub protocol_svdrp_get_channels($$;$) {
 			logging("ERROR", "SVDRP: no channels received");
 			exit 1;
 		} else {
-			logging("DEBUG", "VDR: amount of channels received via SVDRP: " . scalar(@channels_raw));
+			logging("DEBUG", "SVDRP: amount of channels received: " . scalar(@channels_raw));
 		};
 
 		if (defined $channels_file_write_raw) {
 			logging("NOTICE", "SVDRP write raw channels contents to file: " . $channels_file_write_raw);
-			open(FILE, ">$channels_file_write_raw") || die;
+			if (!open(FILE, ">$channels_file_write_raw")) {
+				logging("ERROR", "SVDR: can't write raw contents of channels to file: ". $$channels_file_write_raw . " (" . $! . ")");
+			} else {
+				foreach my $line (@channels_raw) {
+					print FILE $line . "\n";
+				};
 
-			foreach my $line (@channels_raw) {
-				print FILE $line . "\n";
+				close(FILE);
+				logging("NOTICE", "SVDR: raw contents of channels written to file written: " . $channels_file_write_raw);
 			};
-
-			close(FILE);
-			logging("NOTICE", "SVDR raw contents of channels written to file written: " . $channels_file_write_raw);
 		};
 	};
 
@@ -284,14 +286,16 @@ sub protocol_svdrp_get_timers($$;$) {
 		
 		if (defined $timers_file_write_raw) {
 			logging("NOTICE", "SVDRP write raw timers contents to file: " . $timers_file_write_raw);
-			open(FILE, ">$timers_file_write_raw") || die;
+			if (! open(FILE, ">$timers_file_write_raw")) {
+				logging("ERROR", "SVDRP: can't open file for writing raw contents of timers: " . $$timers_file_write_raw . " (" . $! . ")");
+			} else {
+				foreach my $line (@timers_raw) {
+					print FILE $line . "\n";
+				};
 
-			foreach my $line (@timers_raw) {
-				print FILE $line . "\n";
+				close(FILE);
+				logging("NOTICE", "SVDRP raw contents of timers written to file written: " . $timers_file_write_raw);
 			};
-
-			close(FILE);
-			logging("NOTICE", "SVDRP raw contents of timers written to file written: " . $timers_file_write_raw);
 		};
 	};
 
@@ -414,13 +418,16 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	};
 
 	if ($destination eq "file") {
-		open(FILE, ">$location") || die;
-		logging("DEBUG", "SVDRP: write raw contents of timer actions to file: " . $location);
-		foreach my $line (@commands_svdrp) {
-			print FILE $line . "\n";
+		if (!open(FILE, ">$location")) {
+			logging("ERROR", "SVDRP: can't open file for writing raw contents of timer actions: " . $location . " (" . $! . ")");
+		} else {
+			logging("DEBUG", "SVDRP: write raw contents of timer actions to file: " . $location);
+			foreach my $line (@commands_svdrp) {
+				print FILE $line . "\n";
+			};
+			close(FILE);
+			logging("INFO", "SVDRP: raw contents of timer actions written to file: " . $location);
 		};
-		close(FILE);
-		logging("INFO", "SVDRP: raw contents of timer actions written to file: " . $location);
 	} else {
 		my ($Dest, $Port) = split /:/, $location;
 		my $sim = 0;
