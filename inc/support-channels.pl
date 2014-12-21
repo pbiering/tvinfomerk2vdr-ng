@@ -52,7 +52,7 @@ sub print_dvr_channels($) {
 			$time = "  timerange=" . $$channel_hp{'timerange'};
 		};
 
-		logging("DEBUG", sprintf("channel  cid=%5s  source=%s  type=%s  ca=%d  name=%-" . $name_maxlen . "s  group=%-" . $group_maxlen . "s  altnames=%s%s",
+		logging("DEBUG", sprintf("CHANNELS: cid=%5s  source=%s  type=%s  ca=%d  name=%-" . $name_maxlen . "s  group=%-" . $group_maxlen . "s  altnames=%s%s",
 			$$channel_hp{'cid'},
 			$$channel_hp{'source'},
 			$$channel_hp{'type'},
@@ -218,7 +218,7 @@ sub filter_service_channels($$$) {
 
 	# check filter options
 	if (defined $$channel_filter_hp{'skip_not_enabled'}) {
-		logging("DEBUG", "CHANNEL: option 'skip_not_enabled' specified: " . $$channel_filter_hp{'skip_not_enabled'});
+		logging("DEBUG", "CHANNELS: option 'skip_not_enabled' specified: " . $$channel_filter_hp{'skip_not_enabled'});
 		$skip_not_enabled = $$channel_filter_hp{'skip_not_enabled'};
 	};
 
@@ -229,12 +229,12 @@ sub filter_service_channels($$$) {
 
 			if ($skip_not_enabled ne "0") {
 				# generally disabled
-				logging("TRACE", "CHANNEL: skip channel(not-enabled): " . $$channel_hp{'name'});
+				logging("TRACE", "CHANNELS: skip channel(not-enabled): " . $$channel_hp{'name'});
 				next;
 			};
 		};
 
-		logging("TRACE", "CHANNEL: copy channel: " . $$channel_hp{'name'});
+		logging("TRACE", "CHANNELS: copy channel: " . $$channel_hp{'name'});
 		push @$channels_filtered_ap, $channel_hp;
 	};
 };
@@ -271,7 +271,7 @@ sub print_service_dvr_channel_map($$;$) {
 	};
 
 
-	logging("INFO", "SERVICE => DVR channel mapping result") if (defined $info_level);
+	logging("INFO", "CHANNELS: DVR channel mapping result:" . sprintf("%" . ($s_name_maxlen - 1) . "s => DVR", "SERVICE")) if (defined $info_level);
 
 	foreach my $s_cid (sort { lc($$service_cid_to_dvr_cid_map_hp{$a}->{'name'}) cmp lc($$service_cid_to_dvr_cid_map_hp{$b}->{'name'}) } keys %$service_cid_to_dvr_cid_map_hp) {
 		my $d_cid  = $$service_cid_to_dvr_cid_map_hp{$s_cid}->{'cid'};
@@ -280,7 +280,7 @@ sub print_service_dvr_channel_map($$;$) {
 		$count_all++;
 
 		if (! defined $d_cid || $d_cid eq "0" || $d_cid eq "") {
-			logging("WARN", "SERVICE: no DVR channel found: " . sprintf("%-" . $s_name_maxlen . "s %3d", $s_name, $s_cid) . " (candidate for deselect)");
+			logging("WARN", "CHANNELS: no DVR channel found: " . sprintf("%-" . $s_name_maxlen . "s %3d", $s_name, $s_cid) . " (candidate for deselect)");
 			$count_notfound++;
 			next;
 		};
@@ -292,12 +292,12 @@ sub print_service_dvr_channel_map($$;$) {
 		my $loglevel = "DEBUG";
 		$loglevel = "INFO" if (defined $info_level);
 
-		logging($loglevel, "SERVICE: DVR channel mapping : " . sprintf("%-" . $s_name_maxlen . "s %3d => %" . $d_cid_flag . $d_cid_maxlen . "s  %s", $s_name, $s_cid,$d_cid, $d_name));
+		logging($loglevel, "CHANNELS: DVR channel mapping : " . sprintf("%-" . $s_name_maxlen . "s %3d => %" . $d_cid_flag . $d_cid_maxlen . "s  %s", $s_name, $s_cid,$d_cid, $d_name));
 	};
 
 	my $loglevel = "INFO";
 	$loglevel = "WARN" if ($count_notfound > 0);
-	logging($loglevel, "SERVICE => DVR channel mapping statistics: num=" . $count_all . " match=" . $count_match . " notfound=" . $count_notfound);
+	logging($loglevel, "CHANNELS: SERVICE => DVR channel mapping statistics: num=" . $count_all . " match=" . $count_match . " notfound=" . $count_notfound);
 };
 
 

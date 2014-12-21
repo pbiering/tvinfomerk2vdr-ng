@@ -252,7 +252,8 @@ sub help() {
 #         --system <type>           define SYSTEM type
 #                                     default/configured: $setup{'system'}
 #                                     supported         : $system_list_supported_string
-
+#Channel Mapping
+#         -u                        show unfiltered Channel Map results (and stop)
 
 	print qq{$progname/$progversion : SERVICE to DVR timer synchronization tool
 
@@ -291,16 +292,15 @@ DVR related
 
 Channel Mapping
          -c|--scm                  Show Channel Map results (and stop)
-         -u                        show unfiltered Channel Map results (and stop)
          --scs                     Show Channelmap Suggestions
          --icc                     Include Ca Channels (default: no use)
          --wcg <group>             Whitelist-Ca-Group (can be used more than one time)
-
+                                    '*' => all CA groups
 Debug options:
          -v                        Show verbose messages
          -D	                   Debug Mode
          -T	                   Trace Mode
-         -C class[,...]            Debug Classes: $debug_class_string
+         -C <class>[,...]          Debug/Trace Classes: $debug_class_string ('*' for all)
          -X	                   XML Debug Mode
          -N	                   No real DVR change action (do not delete/add timers but write an action fike)
          -W                        Write (all)  raw responses to files
@@ -533,7 +533,12 @@ if (defined $file_properties) {
 
 			if ($_ =~ /^\s*([^\s]+)\s*=\s*([^\s]*)\s*$/o) {
 				my ($key, $value) = ($1, $2);
-				logging("DEBUG", "read from config file: " . $key . "=" . $value);
+
+				if ($key !~ /\.password$/o) {
+					logging("DEBUG", "read from config file: " . $key . "=" . $value);
+				} else {
+					logging("DEBUG", "read from config file: " . $key . "=*****");
+				};
 
 				if ($value eq "") {
 					$properties{$key} = undef;
@@ -791,10 +796,27 @@ if (defined $opt_F) {
 
 ## --prefix
 # defaults for read/write raw files
+# supporting:	 .
+# 		 ../
+# 		 token
 my $prefix = "";
-$prefix = $opt_prefix . "-" if (defined $opt_prefix);
-$config{'service.source.file.prefix'}  = $dirname . "/" . $prefix . "service-" . $setup{'service'} . "-" . $config{'service.user'} if (defined $config{'service.user'});
-$config{'dvr.source.file.prefix'} = $dirname . "/" . $prefix . "dvrhost-" . $config{'dvr.host'};
+
+if (defined $opt_prefix) {
+	if ($opt_prefix eq ".") {
+		$prefix = "";
+	} elsif ($opt_prefix =~ /^\.(\.)?\//o) {
+		$prefix = $opt_prefix;
+	} elsif ($opt_prefix =~ /^\//o) {
+		$prefix = $opt_prefix;
+	} else {
+		$prefix = $dirname . "/" .$opt_prefix . "-";
+	};
+} else {
+	$prefix = $dirname . "/";
+};
+
+$config{'service.source.file.prefix'}  = $prefix . "service-" . $setup{'service'} . "-" . $config{'service.user'} if (defined $config{'service.user'});
+$config{'dvr.source.file.prefix'} = $prefix . "dvrhost-" . $config{'dvr.host'};
 
 if (! defined $config{'dvr.host'}) {
 	logging("ERROR", "DVR host not specified (and unable to autodetect)");
@@ -833,8 +855,13 @@ if (defined $opt_C) {
 	foreach my $entry (split ",", $opt_C) {
 		if (defined $debug_class{$entry}) {
 			$debug_class{$entry} = 1;
+		} elsif ($entry eq "*") {
+			# enable all
+			foreach my $key (keys %debug_class) {
+				$debug_class{$key} = 1;
+			};
 		} else {
-			logging("ERROR", "Unsupported debug class: " . $entry);
+			logging("ERROR", "Unsupported DEBUG/TRACE class: " . $entry);
 			exit 1;
 		};
 	};
@@ -1096,8 +1123,8 @@ print_service_channels(\@channels_service_filtered);
 
 ###################################################
 ## Map service(filtered) and dvr(filtered) channels
-# display warnings if service has more channels
-#  than dvr
+# display warnings if SERVICE has more channels
+#  than DVR
 ###################################################
 
 my %service_cid_to_dvr_cid_map;
@@ -1161,8 +1188,8 @@ if (defined $opt_show_channelmap_suggestions) {
 ######################################################
 ## Map service(unfiltered and dvr(unfiltered) channels
 ######################################################
-
-if (defined $opt_u) {
+# 20141221: disabled, not useful
+if ((defined $opt_u) && (1 == 0)) {
 	my %service_cid_to_dvr_cid_map_unfiltered2;
 	%flags_channelmap = (
 		'force_hd_channels'    => 0,

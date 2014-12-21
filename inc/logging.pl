@@ -129,8 +129,11 @@ sub logging($$) {
 
 sub logging_shutdown() {
 	if ($debug != 0) {
+		if (scalar (keys %debug_suppressed) > 0) {
+			logging("DEBUG", "suppressed DEBUG/TRACE lines (enable with -C <class>[,<class>]):");
+		};
 		foreach my $key (sort keys %debug_suppressed) {
-			logging("DEBUG", "suppressed debug/trace lines: " . $key . ":" . $debug_suppressed{$key});
+			logging("DEBUG", "suppressed lines of class: " . $key . ":" . $debug_suppressed{$key});
 		};
 	};
 };

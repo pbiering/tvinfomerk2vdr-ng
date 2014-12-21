@@ -367,11 +367,11 @@ sub service_tvinfo_get_timers($) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
 			if (! open(FILE, ">$WriteScheduleXML")) {
 				logging("ERROR", "TVINFO: can't write XML contents of timers to file: " . $WriteScheduleXML . " (" . $! . ")");
-			} else {
-				print FILE $xml_raw;
-				close(FILE);
-				logging("NOTICE", "TVINFO: XML contents of timers written to file: " . $WriteScheduleXML);
+				exit 1;
 			};
+			print FILE $xml_raw;
+			close(FILE);
+			logging("NOTICE", "TVINFO: XML contents of timers written to file: " . $WriteScheduleXML);
 		};
 	};
 

@@ -17,6 +17,7 @@
 # Changelog:
 # 20141106/bie: partially takeover from tvinfomerk2vdr-ng.pl, more abstraction
 # 20141122/bie: import SVDRP related code from inc/helperfunc, minor cleanup
+# 20141221/bie: improve split of raw channel line, fix bug in separating alternative names
 
 use strict;
 use warnings;
@@ -62,8 +63,6 @@ sub protocol_svdrp_get_channels($$;$) {
 	my $channels_ap = $_[0];
 	my $channels_source_url = $_[1];
 	my $channels_file_write_raw = $_[2];
-
-	#print "DEBUG : channels_source_url=$channels_source_url channels_file_write_raw=$channels_file_write_raw\n" if defined ($debugclass{'HTSP'});
 
 	$channels_source_url =~ /^(file|svdrp):\/\/(.*)$/o;
 
@@ -120,27 +119,38 @@ sub protocol_svdrp_get_channels($$;$) {
 			logging("NOTICE", "SVDRP write raw channels contents to file: " . $channels_file_write_raw);
 			if (!open(FILE, ">$channels_file_write_raw")) {
 				logging("ERROR", "SVDR: can't write raw contents of channels to file: ". $channels_file_write_raw . " (" . $! . ")");
-			} else {
-				foreach my $line (@channels_raw) {
-					print FILE $line . "\n";
-				};
-
-				close(FILE);
-				logging("NOTICE", "SVDR: raw contents of channels written to file written: " . $channels_file_write_raw);
+				exit 1;
 			};
+			foreach my $line (@channels_raw) {
+				print FILE $line . "\n";
+			};
+
+			close(FILE);
+			logging("NOTICE", "SVDR: raw contents of channels written to file written: " . $channels_file_write_raw);
 		};
 	};
 
 	foreach my $line (@channels_raw) {
-		logging("DEBUG", "SVDRP: parse raw channel line: " . $line);
+		logging("TRACE", "SVDRP: parse raw channel line: " . $line);
 
-		my ($vdr_id, $temp) = split(/ /, $line, 2);
+		my ($vdr_id, $temp);
+		if ($line =~ /^([0-9]+) (.*$)/o) {
+			$vdr_id = $1;
+			$temp = $2;
+		} else {
+			logging("WARN", "SVDRP: unsupported channel line format: " . $line);
+			next;
+		};
+
 		my ($name, $frequency, $polarization, $source, $symbolrate, $vpid, $apid, $tpid, $ca, $service_id, $nid, $tid, $rid) = split(/\:/, $temp);
+
+		logging("TRACE", "SVDRP: found name='" . $name . "'");
 
 		my $type = "SD"; # default
 
 		if (! defined $name) {
 			# skip if not defined: name
+			logging("TRACE", "SVDRP: skip channel(undefined name): " . sprintf("%4d", $vdr_id));
 			next;
 		};
 
@@ -158,7 +168,7 @@ sub protocol_svdrp_get_channels($$;$) {
 
 		if ($vpid_extracted eq "0" || $vpid_extracted eq "1") {
 			# skip (encrypted) radio channels
-			logging("TRACE", "ChannelPrep: skip VDR channel(radio): " . sprintf("%4d / %s", $vdr_id, $name));
+			logging("TRACE", "SVDRP: skip channel(radio): " . sprintf("%4d / %s", $vdr_id, $name));
 			next;
 		};
 
@@ -167,23 +177,35 @@ sub protocol_svdrp_get_channels($$;$) {
 		($name, $group) = split /;/, encode("iso-8859-1", decode("utf8", $name)), 2;
 
 		if (! defined $group) {
+			logging("TRACE", "SVDRP: skip channel(undefined group): " . sprintf("%4d / %s", $vdr_id, $name));
 			next;
 		};
 
-		if ($name eq "." || $name eq "" || $group eq "." || $group eq "") {
+		logging("TRACE", "SVDRP: splitted name='" . $name . "' group='" . $group . "'");
+
+		if ($group eq "." || $group eq "") {
+			logging("TRACE", "SVDRP: skip channel(group empty or dot): " . sprintf("%4d / %s", $vdr_id, $name));
+			next;
+		};
+
+		if ($name eq "." || $name eq "") {
+			logging("TRACE", "SVDRP: skip channel(name empty or dot): " . sprintf("%4d / %s", $vdr_id, $name));
 			next;
 		};
 
 		my @altnames;
-		$name =~ /^([^,]+),(.*)/o;
-		if (defined $2) {
+		if ($name =~ /^([^,]+),(.*)/o) {
 			# name has alternatives included
 			$name = $1;
 			@altnames = split /,/, $2;
+			logging("TRACE", "SVDRP: channel name has alternatives included: name='" . $name . "' altnames='" . join("|", @altnames) . "'");
 		};
 
 		# skip channel names which have only numbers
 		if ($name =~ /^[0-9]+$/o) {
+			logging("TRACE", "SVDRP: skip channel(only containing numbers): " . sprintf("%4d / %s", $vdr_id, $name));
+
+			die;
 			next;
 		};
 
@@ -288,14 +310,14 @@ sub protocol_svdrp_get_timers($$;$) {
 			logging("NOTICE", "SVDRP write raw timers contents to file: " . $timers_file_write_raw);
 			if (! open(FILE, ">$timers_file_write_raw")) {
 				logging("ERROR", "SVDRP: can't open file for writing raw contents of timers: " . $timers_file_write_raw . " (" . $! . ")");
-			} else {
-				foreach my $line (@timers_raw) {
-					print FILE $line . "\n";
-				};
-
-				close(FILE);
-				logging("NOTICE", "SVDRP raw contents of timers written to file written: " . $timers_file_write_raw);
+				exit 1;
 			};
+			foreach my $line (@timers_raw) {
+				print FILE $line . "\n";
+			};
+
+			close(FILE);
+			logging("NOTICE", "SVDRP raw contents of timers written to file written: " . $timers_file_write_raw);
 		};
 	};
 
@@ -420,14 +442,14 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	if ($destination eq "file") {
 		if (!open(FILE, ">$location")) {
 			logging("ERROR", "SVDRP: can't open file for writing raw contents of timer actions: " . $location . " (" . $! . ")");
-		} else {
-			logging("DEBUG", "SVDRP: write raw contents of timer actions to file: " . $location);
-			foreach my $line (@commands_svdrp) {
-				print FILE $line . "\n";
-			};
-			close(FILE);
-			logging("INFO", "SVDRP: raw contents of timer actions written to file: " . $location);
+			exit 1;
 		};
+		logging("DEBUG", "SVDRP: write raw contents of timer actions to file: " . $location);
+		foreach my $line (@commands_svdrp) {
+			print FILE $line . "\n";
+		};
+		close(FILE);
+		logging("INFO", "SVDRP: raw contents of timer actions written to file: " . $location);
 	} else {
 		my ($Dest, $Port) = split /:/, $location;
 		my $sim = 0;
