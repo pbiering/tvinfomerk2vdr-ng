@@ -19,6 +19,7 @@
 # 20140804/pb: add support for -P (password hash)
 # 20141206/pb: add support for OpenELEC and new properties file
 # 20141227/pb: improve debug options (add -d), allow also script to be executed by root
+# 20141227/pb: add support for status file (tested on ReelBox), prohibit run in case of last run was less then minimum delta
 
 if [ -f "/etc/openelec-release" ]; then
 	config_base="/storage/.config/tvinfomerk2vdr-ng"
@@ -28,6 +29,7 @@ if [ -f "/etc/openelec-release" ]; then
 else
 	config_base="/etc/opt/tvinfomerk2vdr-ng"
 	program_base="/opt/tvinfomerk2vdr-ng"
+	var_base="/var/opt/tvinfomerk2vdr-ng"
 	system="other"
 	perl=""
 fi
@@ -49,6 +51,13 @@ fi
 
 files_executables="$script"
 files_test="$config $files_executables"
+dirs_test="$var_base"
+
+status_delta_minimum=900	# 15 min
+
+if [ -n "$var_base" ]; then
+	file_status="$var_base/tvinfomerk2vdr-ng-wrapper.status"
+fi
 
 run_by_cron=0
 if [ ! -t 0 ]; then
@@ -177,6 +186,16 @@ while getopts "sp:u:dlXcRPTDWNthSLC:?" opt; do
 	esac
 done
 
+for val in $dirs_test; do
+	if [ ! -d "${val}" ]; then
+		logging "ERROR" "missing given directory: ${val}"
+		exit 1
+	fi
+	if [ ! -w "${val}" ]; then
+		logging "ERROR" "can't write to given directory: ${val}"
+		exit 1
+	fi
+done
 
 for val in $files_test; do
 	if [ ! -e "${val}" ]; then
@@ -218,6 +237,28 @@ if [ "$opt_password_hash" = "1" ]; then
 	echo "Use this hashed password now in $config or config-ng.pl"
 
 	exit 0
+fi
+
+## check status file
+unixtime_current=$(date '+%s')
+if [ -n "$file_status" -a -f "$file_status" ]; then
+	logging "DEBUG" "status file found: $file_status"
+	unixtime_status=$(stat -c "%Z" "$file_status")
+
+	if [ -n "$unixtime_status" ]; then
+		status_delta=$[ $unixtime_current - $unixtime_status ]
+		logging "DEBUG" "delta seconds to last status update: $status_delta"
+		if [ $status_delta -lt $status_delta_minimum ]; then
+			logging "INFO" "delta seconds to last status update is less than given minimum, stop: $status_delta / $status_delta_minimum"
+			exit 0
+		fi
+	fi
+fi
+
+if [ "$opt_user_list" != "1" -a -n "$file_status" ]; then
+	# update status file this also blocks rerun
+	logging "DEBUG" "update status file: $file_status"
+	touch $file_status
 fi
 
 cat "$config" | grep -v '^#' | while IFS=":" read username password folder email other; do
