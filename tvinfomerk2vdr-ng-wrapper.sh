@@ -261,6 +261,13 @@ if [ "$opt_user_list" != "1" -a -n "$file_status" ]; then
 	touch $file_status
 fi
 
+if [ $run_by_cron -eq 1 -a "$opt_debug" != "1" ]; then
+	# called by cron
+	random_delay=$[ $RANDOM / 100 ] # 0-5 min
+	logging "DEBUG" "sleep random delay: $random_delay seconds"
+	sleep $random_delay
+fi
+
 cat "$config" | grep -v '^#' | while IFS=":" read username password folder email other; do
 	if [ -n "$user" -a  "$user" != "$username" ]; then
 		logging "INFO" "skip user: $username"
