@@ -237,6 +237,9 @@ my $file_properties;
 our @logging_summary;
 our $logging_highestlevel = 7;
 
+my @logging_actions_dvr;
+my @logging_actions_service;
+
 ###############################################################################
 ## Functions
 ###############################################################################
@@ -1587,6 +1590,14 @@ if (scalar(keys %d_timers_action) > 0) {
 			. " cid="  . $$d_timer_hp{'cid'} . "(" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . ")"
 			. " title='" . $$d_timer_hp{'title'} . "'"
 		);
+
+		push @logging_actions_dvr, ""
+			. " action=" . (keys(%{$d_timers_action{$d_timer_num}}))[0]
+			. " start="  . strftime("%Y%m%d-%H%M", localtime($$d_timer_hp{'start_ut'}))
+			. " stop="   . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " cid="  . $$d_timer_hp{'cid'} . "(" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . ")"
+			. " title='" . $$d_timer_hp{'title'} . "'"
+		;
 	};
 } else {
 	logging("INFO", "DVR-ACTION: no actions found - nothing to do");
@@ -1632,6 +1643,15 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " lft="     . $d_timer{'lifetime'}
 				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
+
+			push @logging_actions_service, ""
+				. " action="  . $s_timers_action{$s_timer_num}
+				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " d_cid="     . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
+				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
+			;
 		} else {
 			$loglevel = "NOTICE";
 
@@ -1643,6 +1663,14 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
 				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
+
+			push @logging_actions_service, ""
+				. " action="  . $s_timers_action{$s_timer_num}
+				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
+			;
 
 			if ($s_timers_action{$s_timer_num} =~ /^skip/o) {
 				$timers_skipped++;
@@ -1671,17 +1699,26 @@ if ($opt_S) {
 		# nothing to do
 	} else {
 		logging("DEBUG", "summary output (-S) selected, amount of lines: " . scalar(@logging_summary));
-		# print ACTION messages
-		for my $type ("DVR", "SERVICE") {
-			print STDOUT "SUMMARY-ACTIONS: " . $type . "\n";
-			for my $line (grep /$type-ACTION:/, @logging_summary) {
-				my $line_shorten = $line;
-				$line_shorten =~ s/$type-ACTION://;
-				print STDOUT $line_shorten . "\n";
+
+		print STDOUT "SUMMARY-ACTIONS: DVR\n";
+		if (scalar(@logging_actions_dvr) > 0) {
+			for my $line (@logging_actions_dvr) {
+				print STDOUT $line . "\n";
 			};
-			print STDOUT "\n";
+		} else {
+			print STDOUT " (nothing to do)\n";
 		};
-			
+
+		print STDOUT "\n";
+		print STDOUT "SUMMARY-ACTIONS: SERVICE\n";
+		if (scalar(@logging_actions_service) > 0) {
+			for my $line (@logging_actions_service) {
+				print STDOUT $line . "\n";
+			};
+		} else {
+			print STDOUT " (nothing to do)\n";
+		};
+
 		print STDOUT "\n";
 		print STDOUT "SUMMARY-ALL:\n";
 
