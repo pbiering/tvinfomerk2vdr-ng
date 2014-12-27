@@ -25,3 +25,16 @@ Configuration
 	cd /opt/tvinfomerk2vdr-ng-devel (in case of devel branch)
 
 see now CONFIGURATION
+
+
+Creation of Cron-Job
+--------------------
+on reboot & every 30 minutes
+
+# cat <<END >/etc/cron.d/tvinfomerk2vdr-ng
+@reboot root /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh
+*/30 * * * * root /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh
+END
+
+See also then syslog output:
+# tail -f /var/log/syslog
