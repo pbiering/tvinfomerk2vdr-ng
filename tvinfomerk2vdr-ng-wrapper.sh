@@ -18,6 +18,7 @@
 # 20140804/pb: add protection to avoid running this script as root
 # 20140804/pb: add support for -P (password hash)
 # 20141206/pb: add support for OpenELEC and new properties file
+# 20141227/pb: improve debug options (add -d), allow also script to be executed by root
 
 if [ -f "/etc/openelec-release" ]; then
 	config_base="/storage/.config/tvinfomerk2vdr-ng"
@@ -29,11 +30,6 @@ else
 	program_base="/opt/tvinfomerk2vdr-ng"
 	system="other"
 	perl=""
-	# others, e.g. ReelBox
-	if [ $UID -eq 0 ]; then
-		echo "ERROR : this script is not allowed to run as root"
-		exit 1
-	fi
 fi
 
 config="$config_base/tvinfomerk2vdr-ng-users.conf"
@@ -64,7 +60,7 @@ logging() {
 	shift
 	local message="$*"
 
-	if [ "$run_by_cron" = "1" ]; then
+	if [ "$run_by_cron" = "1" -a "$opt_debug" != "1" ]; then
 		logger -t "$progname" "$message"
 	else
 		printf "%-6s: %s\n" "$level" "$message"
@@ -86,6 +82,7 @@ Debug options:
 	-t	use test script $script_test
 	-p	file prefix for data files (-R/-W)
 	-s	simulate run-by-cron
+	-d	debug this wrapper script
 
 Debug options for called script:
 	-R	read SERVICE/DVR data from file
@@ -114,7 +111,7 @@ END
 }
 
 # option handling
-while getopts "sp:u:lXcRPTDWNthSLC:?" opt; do
+while getopts "sp:u:dlXcRPTDWNthSLC:?" opt; do
 	case $opt in
 	    s)
 		run_by_cron=1
@@ -131,13 +128,16 @@ while getopts "sp:u:lXcRPTDWNthSLC:?" opt; do
 		opt_write_to_file=1
 		;;
 	    N)
-		logging "INFO" "debug option selected: no VDR timer change"
+		logging "INFO" "debug option selected: no DVR timer change"
 		script_flags="$script_flags -N"
+		;;
+	    d)
+		logging "INFO" "debug option selected: wrapper script debug"
+		opt_debug=1
 		;;
 	    D)
 		logging "INFO" "debug option selected: script debug"
 		script_flags="$script_flags -D"
-		opt_debug=1
 		;;
 	    T)
 		logging "INFO" "debug option selected: script tracing"
@@ -258,23 +258,36 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 	fi
 
 	if [ $run_by_cron -eq 0 -o -z "$email" ]; then
-		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
 		if [ $run_by_cron -eq 1 ]; then
 			script_options="$script_options -L"
 		fi
+		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
 		$perl $script $script_flags -U "$username" $script_options 
 	else
-		output="`$perl $script $script_flags -S -L -U "$username" $script_options" 2>&1`"
-		if [ -n "$output" ]; then
+		script_flags="$script_flags -S"
+		script_options="$script_options -L"
+		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
+		output="`$perl $script $script_flags -U "$username" $script_options 2>&1`"
+		if [ -n "$output" -a "$opt_debug" != "1" ]; then
 			echo "$output" | mail -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username" $email
+		else
+			if [ -n "$output" ]; then
+				logging "DEBUG" "in non-debug mode output would be sent via mail to: $email"
+				echo "==="
+				echo "$output"
+				echo "==="
+			else
+				logging "DEBUG" "no important output, no e-mail would be sent via mail to: $email"
+			fi
 		fi
 	fi
 
 	if [ -z "$user" ]; then
-		if [ $run_by_cron -eq 1 ]; then
-			sleep 30
-		else
-			sleep 5
+		sleeptime=5
+		if [ $run_by_cron -eq 1 -a "$opt_debug" != "1" ]; then
+			sleeptime=30
 		fi
+		[ "$opt_debug" = "1" ] && logging "DEBUG" "Sleep some seconds: $sleeptime"
+		sleep $sleeptime
 	fi
 done

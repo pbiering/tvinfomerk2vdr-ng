@@ -34,6 +34,8 @@ our $opt_T;
 our $opt_S;
 our $opt_L;
 our %debug_class;
+our @logging_summary;
+our $logging_highestlevel = 7;
 
 ## local variables
 my %debug_suppressed;
@@ -45,8 +47,6 @@ my %debug_suppressed;
 
 ## Logging
 my $syslog_status = 0;
-my @logging_summary;
-my $logging_highestlevel = 7;
 
 my %loglevels = (
 	"EMRG"     => 0,

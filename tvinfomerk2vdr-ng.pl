@@ -234,9 +234,8 @@ my @dvr_hosts;
 my $file_properties;
 
 ## Logging
-my $syslog_status = 0;
-my @logging_summary;
-my $logging_highestlevel = 7;
+our @logging_summary;
+our $logging_highestlevel = 7;
 
 ###############################################################################
 ## Functions
@@ -267,7 +266,7 @@ Usage:
 
 Options: 
          -L                        use syslog instead of stderr
-         -S                        show summary to stdout in case of any changes or log messages > notice
+         -S                        show summary to stdout in case of any changes or log messages > level notice
          -h	                   Show this help text
          --pp	                   Print Properties (and stop)
          --srp	                   Skip Read Properties from default file
@@ -1665,5 +1664,32 @@ if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) 
 
 END:
 logging_shutdown();
+
+if ($opt_S) {
+	if ((scalar(keys %d_timers_action) == 0) && (scalar(keys %s_timers_action) == 0) && ($logging_highestlevel > 4)) {
+		logging("DEBUG", "summary output (-S) selected, but no actions or log entries with level > notice");
+		# nothing to do
+	} else {
+		logging("DEBUG", "summary output (-S) selected, amount of lines: " . scalar(@logging_summary));
+		# print ACTION messages
+		for my $type ("DVR", "SERVICE") {
+			print STDOUT "SUMMARY-ACTIONS: " . $type . "\n";
+			for my $line (grep /$type-ACTION:/, @logging_summary) {
+				my $line_shorten = $line;
+				$line_shorten =~ s/$type-ACTION://;
+				print STDOUT $line_shorten . "\n";
+			};
+			print STDOUT "\n";
+		};
+			
+		print STDOUT "\n";
+		print STDOUT "SUMMARY-ALL:\n";
+
+		# print messages
+		for my $line (@logging_summary) {
+			print STDOUT $line . "\n";
+		};
+	};
+};
 
 exit(0);
