@@ -1015,7 +1015,7 @@ sub protocol_htsp_delete_add_timers($$) {
 			if (! $response->is_success) {
 				logging("ERROR", "HTSP: problem configuring DVR via HTSP: " . $response->status_line . " (sent: " . $line . ")");
 				$rc = 2; # problem
-				continue;
+				next;
 			};
 
 			my $result = $response->content;
