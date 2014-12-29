@@ -33,6 +33,7 @@
 # 20140804/pb: add support for MD5 hashed password
 # 201411xx/pb: complete reorg, support now also DVR tvheadend via HTSP
 # 20141129/pb: hibernate support of dedicated SYSTEM (currently not needed)
+# 20141229/pb: improve error handling
 
 use strict; 
 use warnings; 
@@ -111,7 +112,8 @@ require ("inc/support-dvr.pl");
 require ("inc/support-channels.pl");
 require ("inc/support-channelmap.pl");
 
-my $result;
+my $rc_exit = 0;
+my $rc;
 
 our $debug = 0;
 
@@ -495,7 +497,12 @@ logging("INFO", "try reading configuration from file (OLD FORMAT): " . $file_con
 if (! -e $file_config) {
 	logging("NOTICE", "given config file (OLD FORMAT) is not existing: " . $file_config);
 } else {
-	require ($file_config) || die;
+	require ($file_config);
+	if ($? != 0) {
+		$rc_exit = 5;
+		logging("FATAL", "can't read config file (OLD FORMAT): " . $file_config);
+		goto("END");
+	};
 	logging("INFO", "read configuration from file (OLD FORMAT): " . $file_config);
 
 	# map old options to new properties
@@ -704,10 +711,15 @@ $opt_write_service_to_file  = 1 if (defined $opt_W);
 $opt_write_dvr_to_file      = 1 if (defined $opt_W);
 
 if (defined $opt_read_service_from_file && $opt_write_service_to_file) {
-	die "read from and write to file for SERVICE can't be used at the same time";
+	logging("FATAL", "read from and write to file for SERVICE can't be used at the same time");
+	$rc_exit = 5;
+	goto("END");
 };
+
 if (defined $opt_read_dvr_from_file && $opt_write_dvr_to_file) {
-	die "read from and write to file for DVR can't be used at the same time";
+	logging("FATAL", "read from and write to file for DVR can't be used at the same time");
+	$rc_exit = 5;
+	goto("END");
 };
 
 # defaults
@@ -916,7 +928,13 @@ if (defined $config{'service.user'}) {
 # Reading external values
 ###############################################################################
 
-$module_functions{'dvr'}->{$setup{'dvr'}}->{'init'}() || die "Problem with dvr_init";
+$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'init'}();
+
+if ($rc != 0) {
+	logging("ERROR", "Problem with dvr_init");
+	$rc_exit = 5;
+	goto("END");
+};
 
 if (! defined $config{"dvr.margin.start"}) {
 	$config{"dvr.margin.start"} = $properties{'dvr.host.default.margin.start'};
@@ -991,7 +1009,12 @@ if ((defined $opt_print_properties) || (defined $opt_write_properties)) {
 		logging("DEBUG", "write properties to file: " . $file_properties);
 
 		foreach my $line (@lines) {
-			print FILE $line . "\n" || die "problem writing to file: $file_properties";
+			print FILE $line . "\n";
+			if ($? != 0) {
+				logging("ERROR", "problem writing to file: " . $file_properties);
+				$rc_exit = 5;
+				goto("END");
+			};
 		};
 
 		close(FILE);
@@ -1062,11 +1085,18 @@ sub get_service_channel_name_by_cid($) {
 #############################################################
 ## Retrieve channels from DVR
 #############################################################
-$result = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_channels'}(\@channels_dvr);
+$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_channels'}(\@channels_dvr);
+
+if ($rc != 0) {
+	logging("CRIT", "DVR: get_channels returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
 
 if (scalar(@channels_dvr) == 0) {
-	logging("CRIT", "DVR amount of channels is ZERO - STOP");
-	exit 1;
+	logging("CRIT", "DVR: amount of channels is ZERO - STOP");
+	$rc_exit = 4;
+	goto("END");
 };
 
 if ((defined $properties{"dvr.host." . $config{'dvr.host'} . ".include-ca-channels"})
@@ -1103,11 +1133,18 @@ print_dvr_channels(\@channels_dvr_filtered);
 #######################################
 ## Retrieve channnels from service
 #######################################
-$result = $module_functions{'service'}->{$setup{'service'}}->{'get_channels'}(\@channels_service);
+$rc = $module_functions{'service'}->{$setup{'service'}}->{'get_channels'}(\@channels_service);
+
+if ($rc != 0) {
+	logging("CRIT", "SERVICE: get_channels returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
 
 if (scalar(@channels_service) == 0) {
-	logging("CRIT", "SERVICE amount of channels is ZERO - STOP");
-	exit 1;
+	logging("CRIT", "SERVICE: amount of channels is ZERO - STOP");
+	$rc_exit = 4;
+	goto("END");
 };
 
 #logging("DEBUG", "SERVICE channels before filtering/expanding (amount: " . scalar(@channels_service) . "):");
@@ -1140,7 +1177,13 @@ my %flags_channelmap;
 	'quiet'                => 1,
 );
 
-my $rc = channelmap(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, \@channels_service_filtered, \%flags_channelmap);
+$rc = channelmap(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, \@channels_service_filtered, \%flags_channelmap);
+
+if ($rc != 0) {
+	logging("CRIT", "ChannelMap: channelmap returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
 
 print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, $opt_c);
 
@@ -1158,6 +1201,12 @@ my %service_cid_to_dvr_cid_map_unfiltered;
 
 if (defined $opt_show_channelmap_suggestions) {
 	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered, \@channels_service, \%flags_channelmap);
+
+	if ($rc != 0) {
+		logging("CRIT", "ChannelMap: channelmap returned an error - STOP");
+		$rc_exit = 4;
+		goto("END");
+	};
 
 	#print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered, \@channels_dvr_filtered) if ($verbose > 0);
 
@@ -1201,10 +1250,16 @@ if ((defined $opt_u) && (1 == 0)) {
 
 	$rc = channelmap(\%service_cid_to_dvr_cid_map_unfiltered2, \@channels_dvr, \@channels_service, \%flags_channelmap);
 
+	if ($rc != 0) {
+		logging("CRIT", "ChannelMap: channelmap returned an error - STOP");
+		$rc_exit = 4;
+		goto("END");
+	};
+
 	logging("INFO", "SERVICE(unfiltered) => DVR(unfiltered) mapping result");
 	print_service_dvr_channel_map(\%service_cid_to_dvr_cid_map_unfiltered2, \@channels_dvr);
 
-	exit 0;
+	goto("END");
 };
 
 if (defined $opt_c) {
@@ -1225,6 +1280,12 @@ my @timers_service;
 
 $rc = $module_functions{'service'}->{$setup{'service'}}->{'get_timers'}(\@timers_service);
 
+if ($rc != 0) {
+	logging("CRIT", "SERVICE: get_timers returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
+
 
 #######################################
 ## Get timers from DVR
@@ -1233,16 +1294,28 @@ my @timers_dvr;
 
 $rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'get_timers'}(\@timers_dvr);
 
+if ($rc != 0) {
+	logging("CRIT", "DVR: get_timers returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
+
 # convert channels if necessary
 $rc = dvr_convert_timers_channels(\@timers_dvr, \@channels_dvr);
 
+if ($rc != 0) {
+	logging("CRIT", "DVR: dvr_convert_timers_channels returned an error - STOP");
+	$rc_exit = 4;
+	goto("END");
+};
 
 #######################################
 ## Pre start processing
 #######################################
 if ((defined $opt_write_service_to_file) || (defined $opt_write_dvr_to_file)) {
 	logging("NOTICE", "Stop here because debug options for writing response files selected");
-	exit 0;
+	$rc_exit = 0;
+	goto("END");
 };
 
 
@@ -1422,6 +1495,7 @@ foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timer
 };
 
 ## check for timers provided by SERVICE not found in DVR
+logging("DEBUG", "SERVICE/DVR: check for timers provided by service but not found in DVR");
 # create helper hash
 my %channels_lookup_by_cid;
 foreach my $channel_hp (@channels_dvr) {
@@ -1434,6 +1508,8 @@ if (scalar(@s_timers_num) > scalar(@s_timers_num_found)) {
 
 		if ((defined $s_timers_action{$s_timer_num}) && ($s_timers_action{$s_timer_num} =~ /^skip/o)) {
 			# skip if marked with skip
+			logging("DEBUG", "SERVICE/DVR: SERVICE timer ignored, marked with skip: " . $s_timer_num);
+			next;
 		};
 
 		my $s_timer_hp = $s_timers_entries{$s_timer_num};
@@ -1595,8 +1671,8 @@ if (scalar(keys %d_timers_action) > 0) {
 			. " "  . uc((keys(%{$d_timers_action{$d_timer_num}}))[0])
 			. " "  . strftime("%Y-%m-%d %H%M", localtime($$d_timer_hp{'start_ut'}))
 			. "-"  . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
+			. " '" . $$d_timer_hp{'title'} . "'" . " " x ($titlename_max - length($$d_timer_hp{'title'}))
 			. " '" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . "'"
-			. " '" . $$d_timer_hp{'title'} . "'"
 		;
 	};
 } else {
@@ -1648,9 +1724,9 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " "    . uc($s_timers_action{$s_timer_num})
 				. " "  . strftime("%Y-%m-%d %H%M", localtime($$s_timer_hp{'start_ut'}))
 				. "-"  . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " '" . shorten_titlename($$s_timer_hp{'title'}) . "'" . " " x ($titlename_max - length(shorten_titlename($$s_timer_hp{'title'})))
 				. " '"   . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . "'"
-				. " => '" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . "'"
-				. " '"   . shorten_titlename($$s_timer_hp{'title'}) . "'"
+				. "=>'" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . "'"
 			;
 		} else {
 			$loglevel = "NOTICE";
@@ -1668,8 +1744,8 @@ if (scalar(keys %s_timers_action) > 0) {
 				. " "  . uc($s_timers_action{$s_timer_num})
 				. " "  . strftime("%Y-%m-%d %H%M", localtime($$s_timer_hp{'start_ut'}))
 				. "-"  . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " '" . shorten_titlename($$s_timer_hp{'title'}) . "'" . " " x ($titlename_max - length(shorten_titlename($$s_timer_hp{'title'})))
 				. " '" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . "'"
-				. " '"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			;
 
 			if ($s_timers_action{$s_timer_num} =~ /^skip/o) {
@@ -1683,7 +1759,15 @@ if (scalar(keys %s_timers_action) > 0) {
 
 if ((scalar(keys %d_timers_action) > 0) || (scalar(keys %s_timers_action) > 0)) {
 	$rc = $module_functions{'dvr'}->{$setup{'dvr'}}->{'create_update_delete_timers'}(\@timers_dvr, \%d_timers_action, \@d_timers_new);
-	logging(($rc > 0) ? "WARN" : "INFO", "result of DVR create/update/delete: " . (($rc == 0) ? "OK" : $rc));
+
+	my $level = "INFO";
+	if ($rc != 0) {
+		$level = "WARN";
+		$rc_exit = 1;
+	};
+
+	logging($level, "result of DVR create/update/delete: " . (($rc == 0) ? "OK" : $rc));
+
 	logging("NOTICE", "dry-run mode selected (-N) - no changes applied to DVR!") if (defined $opt_N);
 	logging("WARN", "timers skipped: " . $timers_skipped) if ($timers_skipped > 0);
 } else {
@@ -1724,9 +1808,9 @@ if ($opt_S) {
 
 		# print messages
 		for my $line (@logging_summary) {
-			print STDOUT $line . "\n";
+			print STDOUT " " . $line . "\n";
 		};
 	};
 };
 
-exit(0);
+exit($rc_exit);

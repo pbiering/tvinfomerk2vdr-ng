@@ -85,7 +85,7 @@ sub dvr_tvheadend_init() {
 		$port = $config{'dvr.port'};
 	};
 
-	return 1;
+	return(0);
 };
 
 
@@ -97,11 +97,13 @@ sub dvr_tvheadend_init() {
 sub dvr_tvheadend_get_channels($) {
 	my $channels_ap = $_[0];
 
+	logging("DEBUG", "TVHEADEND: get channels");
+
 	my @adapters;
 
 	my $channels_source_url;
 	my $adapters_source_url;
-	my $result;
+	my $rc;
 	my $file;
 	my $adapters_file = $config{'dvr.source.file.prefix'} . "-tv-adapter.json";
 	my $channels_file = $config{'dvr.source.file.prefix'} . "-channels.json";
@@ -120,10 +122,11 @@ sub dvr_tvheadend_get_channels($) {
 	};
 
 	## fetch adapters
-	$result = protocol_htsp_get_adapters(\@adapters, $adapters_source_url, $file);
+	$rc = protocol_htsp_get_adapters(\@adapters, $adapters_source_url, $file);
 
-	if ($result != 0) {
-		die "protocol_htsp_get_adapters";
+	if ($rc != 0) {
+		logging("CRIT", "TVHEADEND: protocol_htsp_get_adapters returned an error");
+		return(1);
 	};
 
 	## run through adapters and get all channels
@@ -142,7 +145,12 @@ sub dvr_tvheadend_get_channels($) {
 			};
 		};
 
-		$result = protocol_htsp_get_channels_per_adapter($channels_ap, $channels_per_adapter_source_url, $$adapter_hp{'deliverySystem'}, $file);
+		$rc = protocol_htsp_get_channels_per_adapter($channels_ap, $channels_per_adapter_source_url, $$adapter_hp{'deliverySystem'}, $file);
+
+		if ($rc != 0) {
+			logging("CRIT", "TVHEADEND: protocol_htsp_get_channels_per_adapter returned an error");
+			return(1);
+		};
 
 		## run through channels and create hash with important information
 		foreach my $channel_hp (@$channels_ap) {
@@ -163,7 +171,13 @@ sub dvr_tvheadend_get_channels($) {
 			$file = $channels_file;
 		};
 	};
-	$result = protocol_htsp_get_channels($channels_ap, $channels_source_url, $file);
+
+	$rc = protocol_htsp_get_channels($channels_ap, $channels_source_url, $file);
+
+	if ($rc != 0) {
+		logging("CRIT", "TVHEADEND: protocol_htsp_get_channels returned an error");
+		return(1);
+	};
 
 	## run through channels and apply information retrieved via adapters
 	foreach my $channel_hp (@$channels_ap) {
@@ -177,6 +191,8 @@ sub dvr_tvheadend_get_channels($) {
 			};
 		};
 	};
+
+	return(0);
 };
 
 
@@ -190,7 +206,7 @@ sub dvr_tvheadend_get_timers($) {
 
 	my $timers_source_url;
 	my $confignames_source_url;
-	my $result;
+	my $rc;
 	my $file;
 	my $timers_file = $config{'dvr.source.file.prefix'} . "_dvrlist_upcoming.json";
 	my $confignames_file = $config{'dvr.source.file.prefix'} . "-confignames.json";
@@ -210,7 +226,12 @@ sub dvr_tvheadend_get_timers($) {
 	};
 
 	## fetch confignames
-	$result = protocol_htsp_get_confignames(\@confignames, $confignames_source_url, $file);
+	$rc = protocol_htsp_get_confignames(\@confignames, $confignames_source_url, $file);
+
+	if ($rc != 0) {
+		logging("CRIT", "TVHEADEND: protocol_htsp_get_confignames returned an error");
+		return(1);
+	};
 
 	foreach my $configname_hp (@confignames) {
 		if ($$configname_hp{'identifier'} eq "") {
@@ -237,7 +258,12 @@ sub dvr_tvheadend_get_timers($) {
 			};
 		};
 
-		$result = protocol_htsp_get_config(\@configs, $config_source_url, $file);
+		$rc = protocol_htsp_get_config(\@configs, $config_source_url, $file);
+
+		if ($rc != 0) {
+			logging("CRIT", "TVHEADEND: protocol_htsp_get_config returned an error");
+			return(1);
+		};
 
 		foreach my $config_hp (@configs) {
 			$tvheadend_configs{$$configname_hp{'identifier'}} = $config_hp;
@@ -260,9 +286,11 @@ sub dvr_tvheadend_get_timers($) {
 	};
 
 	## fetch timers
-	$result = protocol_htsp_get_timers($timers_ap, $timers_source_url, $file);
-	if ($result != 0) {
-		die "protocol_htsp_get_timers";
+	$rc = protocol_htsp_get_timers($timers_ap, $timers_source_url, $file);
+
+	if ($rc != 0) {
+		logging("CRIT", "TVHEADEND: protocol_htsp_get_timers returned an error");
+		return(1);
 	};
 
 	foreach my $timer_hp (@$timers_ap) {
@@ -321,6 +349,8 @@ sub dvr_tvheadend_get_timers($) {
 			. " d_d="      . $$timer_hp{'dvr_data'}
 		);
 	};
+
+	return(0);
 };
 
 
@@ -536,7 +566,8 @@ sub dvr_tvheadend_create_update_delete_timers($$$) {
 	};
 
 	# delete/add timers
-	protocol_htsp_delete_add_timers(\@d_timers_delete, \@d_timers_new, \@d_configs_new, $timers_action_url);
+	my $rc = protocol_htsp_delete_add_timers(\@d_timers_delete, \@d_timers_new, \@d_configs_new, $timers_action_url);
+	return($rc);
 };
 
 

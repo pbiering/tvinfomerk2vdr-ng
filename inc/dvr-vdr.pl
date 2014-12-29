@@ -97,7 +97,7 @@ sub dvr_vdr_init() {
 		$port = $config{'dvr.port'};
 	};
 
-	return 1;
+	return(0);
 };
 
 
@@ -109,12 +109,10 @@ sub dvr_vdr_init() {
 sub dvr_vdr_get_channels($) {
 	my $channels_ap = $_[0];
 
-	#print "DEBUG : " . $0 . __FILE__ . (caller(0))[3];
-	#
-	logging("DEBUG", "get channels from DVR");
+	logging("DEBUG", "VDR: get channels");
 
 	my $channels_source_url;
-	my $result;
+	my $rc;
 	my $file;
 
 	$file = undef;
@@ -133,7 +131,9 @@ sub dvr_vdr_get_channels($) {
 		};
 	};
 
-	$result = protocol_svdrp_get_channels($channels_ap, $channels_source_url, $file);
+	$rc = protocol_svdrp_get_channels($channels_ap, $channels_source_url, $file);
+
+	return($rc);
 };
 
 
@@ -146,7 +146,7 @@ sub dvr_vdr_get_timers($) {
 	my $timers_ap = $_[0];
 
 	my $timers_source_url;
-	my $result;
+	my $rc;
 	my $file;
 	my $timers_file = $config{'dvr.source.file.prefix'} . "-timers.svdrp";
 
@@ -163,10 +163,11 @@ sub dvr_vdr_get_timers($) {
 	};
 
 	## fetch timers
-	$result = protocol_svdrp_get_timers($timers_ap, $timers_source_url, $file);
+	$rc = protocol_svdrp_get_timers($timers_ap, $timers_source_url, $file);
 
-	if ($result != 0) {
-		die "protocol_svdrp_get_timers";
+	if ($rc != 0) {
+		logging("CRIT", "VDR: protocol_svdrp_get_timers returned an error");
+		return(1);
 	};
 
 	## extract service/dvr data
@@ -263,6 +264,8 @@ sub dvr_vdr_get_timers($) {
 	};
 
 	logging("DEBUG", "VDR: amount of timers received via SVDRP/file: " . scalar(@$timers_ap));
+
+	return(0);
 };
 
 
@@ -395,7 +398,8 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 	};
 
 	# delete/add timers
-	protocol_svdrp_delete_add_timers(\@d_timers_delete, \@d_timers_new, $timers_action_url);
+	my $rc = protocol_svdrp_delete_add_timers(\@d_timers_delete, \@d_timers_new, $timers_action_url);
+	return($rc);
 };
 
 

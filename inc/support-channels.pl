@@ -179,7 +179,7 @@ sub get_channel_name_by_cid($$) {
 		};
 	};
 
-	die("cid=" . $cid . " not found");
+	die("cid=" . $cid . " not found - FIX CODE");
 };
 
 

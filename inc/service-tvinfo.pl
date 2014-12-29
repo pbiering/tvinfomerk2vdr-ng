@@ -77,9 +77,9 @@ sub request_replace_tokens($) {
 		exit 2;
 	};
 
-	logging("DEBUG", "request  original: " . $request);
-	logging("DEBUG", "username         : " . $config{'service.user'});
-	logging("DEBUG", "password         : " . $config{'service.password'});
+	logging("DEBUG", "TVINFO: request  original: " . $request);
+	logging("DEBUG", "TVINFO: username         : " . $config{'service.user'});
+	logging("DEBUG", "TVINFO: password         : *******");
 
 	# replace username token
 	my $passwordhash;
@@ -92,7 +92,7 @@ sub request_replace_tokens($) {
 	$request =~ s/<USERNAME>/$config{'service.user'}/;
 	$request =~ s/<PASSWORDHASH>/$passwordhash/;
 
-	logging("DEBUG", "request result   : " . $request);
+	# logging("DEBUG", "request result   : " . $request); # disabled, showing hashed password
 	return($request)
 };
 
@@ -121,7 +121,7 @@ sub service_tvinfo_get_channels($$;$) {
 	my $WriteStationsXML = undef;
 
 	if (! defined $config{'service.source.type'}) {
-		die "service.source.type is not defined";
+		die "service.source.type is not defined - FIX CODE";
 	};
 
 	if ($config{'service.source.type'} eq "file") {
@@ -130,19 +130,19 @@ sub service_tvinfo_get_channels($$;$) {
 		$WriteStationsXML = $config{'service.source.file.prefix'} . "-stations.xml";
 	} elsif ($config{'service.source.type'} eq "network") {
 	} else {
-		die "service.source.type is not supported: " . $config{'service.source.type'};
+		die "service.source.type is not supported: " . $config{'service.source.type'} . " - FIX CODE";
 	};
 
 	if (defined $ReadStationsXML) {
 		if (! -e $ReadStationsXML) {
 			logging("ERROR", "TVINFO: given raw file for stations is missing (forget -W before?): " . $ReadStationsXML);
-			exit(1);
+			return(1);
 		};
 		# load 'Sender' (stations) from file
 		logging("INFO", "TVINFO: read XML contents of stations from file: " . $ReadStationsXML);
 		if(!open(FILE, "<$ReadStationsXML")) {
 			logging("ERROR", "TVINFO: can't read XML contents of stations from file: " . $ReadStationsXML);
-			exit(1);
+			return(1);
 		};
 		binmode(FILE);
 		while(<FILE>) {
@@ -161,7 +161,7 @@ sub service_tvinfo_get_channels($$;$) {
 		my $response = $tvinfo_client->request(GET "$request");
 		if (! $response->is_success) {
 			logging("ERROR", "TVINFO: can't fetch stations: " . $response->status_line);
-			exit 1;
+			return(1);
 		};
 
 		$xml_raw = $response->content;
@@ -202,12 +202,12 @@ sub service_tvinfo_get_channels($$;$) {
 	# Version currently missing
 	if ($$data{'version'} ne "1.0") {
 		logging ("ALERT", "XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
-		exit 1;
+		return(1);
 	};
 
 	if ($xml_raw !~ /stations/) {
 		logging ("ERROR", "TVINFO: XML don't contain any stations, empty or username/passwort not proper, can't proceed");
-		exit 1;
+		return(1);
 	} else {
 		my $xml_list_p = @$data{'station'};
 
@@ -265,12 +265,12 @@ sub service_tvinfo_get_channels($$;$) {
 
 	if (scalar(keys %tvinfo_channel_id_by_name) == 0) {
 		logging("ALERT", "No entry found for 'Alle Sender' - please check for latest version and contact asap script development");
-		exit 1;
+		return(1);
 	};
 
 	if (scalar(keys %tvinfo_MeineSender_id_list) == 0) {
 		logging("ALERT", "TVINFO: no entry found for 'Meine Sender' - please check for latest version and contact asap script development");
-		exit 1;
+		return(1);
 	};
 
 	# print 'Meine Sender'
@@ -284,6 +284,8 @@ sub service_tvinfo_get_channels($$;$) {
 		};
 		logging("DEBUG", "TVINFO: selected station: " . sprintf("%4d: %4d %s", $c, $id, $name));
 	};
+
+	return(0);
 };
 
 ################################################################################
@@ -327,19 +329,19 @@ sub service_tvinfo_get_timers($) {
 		$WriteScheduleXML = $config{'service.source.file.prefix'} . "-schedule.xml";
 	} elsif ($config{'service.source.type'} eq "network") {
 	} else {
-		die "service.source.type is not supported: " . $config{'service.source.type'};
+		die "service.source.type is not supported: " . $config{'service.source.type'} . " - FIX CODE";
 	};
 
 	if (defined $ReadScheduleXML) {
 		if (! -e $ReadScheduleXML) {
 			logging("ERROR", "TVINFO: given raw file for timers is missing (forget -W before?): " . $ReadScheduleXML);
-			exit(1);
+			return(1);
 		};
 		# load 'Merkzettel' from file
 		logging("INFO", "TVINFO: read XML contents of timers from file: " . $ReadScheduleXML);
 		if(!open(FILE, "<$ReadScheduleXML")) {
 			logging("ERROR", "TVINFO: can't read XML contents of timers from file: " . $ReadScheduleXML);
-			exit(1);
+			return(1);
 		};
 		binmode(FILE);
 		while(<FILE>) {
@@ -358,7 +360,7 @@ sub service_tvinfo_get_timers($) {
 		my $response = $tvinfo_client->request(GET "$request");
 		if (! $response->is_success) {
 			logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . $response->status_line);
-			exit 1;
+			return(1);
 		};
 
 		$xml_raw = $response->content;
@@ -367,7 +369,7 @@ sub service_tvinfo_get_timers($) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
 			if (! open(FILE, ">$WriteScheduleXML")) {
 				logging("ERROR", "TVINFO: can't write XML contents of timers to file: " . $WriteScheduleXML . " (" . $! . ")");
-				exit 1;
+				return(1);
 			};
 			print FILE $xml_raw;
 			close(FILE);
@@ -396,12 +398,12 @@ sub service_tvinfo_get_timers($) {
 
 	if ($$data{'version'} ne "1.0") {
 		logging ("ALERT", "TVINFO: XML of timer has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
-		exit 1;
+		return(1);
 	};
 
 	if ($xml_raw !~ /epg_schedule_entry/) {
 		logging ("ERROR", "TVINFO: XML timer is empty or username/passwort not proper, can't proceed");
-		exit 1;
+		return(1);
 	} else {
 		my $xml_list_p = @$data{'epg_schedule_entry'};
 
@@ -470,6 +472,8 @@ sub service_tvinfo_get_timers($) {
 	};
 
 	logging("DEBUG", "TVINFO: finish XML timer analysis");
+
+	return(0);
 };
 
 

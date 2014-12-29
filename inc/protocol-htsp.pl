@@ -11,6 +11,7 @@
 #
 # Changelog:
 # 20141028/bie: new
+# 20141229/bie: improved error handling
 
 use strict;
 use warnings;
@@ -38,6 +39,7 @@ our %config;
 ################################################################################
 ################################################################################
 # get generic via HTSP
+# return code: =0:ok !=0:problem
 ################################################################################
 sub protocol_htsp_get_generic($$;$) {
 	my $contents_json_p = $_[0];
@@ -49,15 +51,18 @@ sub protocol_htsp_get_generic($$;$) {
 	$source_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported source_url=$source_url";
+		die "Unsupported source_url=$source_url - FIX CODE";
 	};
 
 	my $source = $1;
 	my $location = $2;
 
 	if ($source eq "file") {
-		logging("INFO", "HTSP: read JSON raw contents from file: " . $location);
-		open(FILE, "<$location") || die "Can't open file: $location";
+		logging("INFO", "HTSP: read raw contents from file: " . $location);
+		if (!open(FILE, "<$location")) {
+			logging("ERROR", "HTSP: can't read raw contents from file: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		$$contents_json_p = <FILE>;
 		close(FILE);
 	} else {
@@ -71,20 +76,25 @@ sub protocol_htsp_get_generic($$;$) {
 		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
-			logging("ERROR", "Can't fetch via HTSP: " . $source_url . ($response->status_line));
-			exit 1;
+			logging("ERROR", "HTSP: can't fetch: " . $source_url . ($response->status_line));
+			return(1);
 		};
 
 		$$contents_json_p = $response->content;
 
 		if (defined $file_write_raw) {
 			logging("NOTICE", "HTSP: write raw contents to file: " . $file_write_raw);
-			open(FILE, ">$file_write_raw") || die;
+			if (!open(FILE, ">$file_write_raw")) {
+				logging("ERROR", "HTSP: can't write raw contents to file: " . $location . " (" . $! . ")");
+				return(1);
+			};
 			print FILE $$contents_json_p;
 			close(FILE);
 			logging("NOTICE", "HTSP: raw contents written to file: " . $file_write_raw);
 		};
 	};
+
+	return(0);
 };
 
 
@@ -96,6 +106,7 @@ sub protocol_htsp_get_generic($$;$) {
 # debug
 # trace:   print contents using Dumper
 # 	 2=print raw contents
+# return code: =0:ok !=0:problem
 #        
 # JSON structure:
 #   {
@@ -126,7 +137,7 @@ sub protocol_htsp_get_channels($$;$) {
 	$channels_source_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported channels_source_url=$channels_source_url";
+		die "Unsupported channels_source_url=$channels_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -137,8 +148,11 @@ sub protocol_htsp_get_channels($$;$) {
 	undef @$channels_p;
 
 	if ($source eq "file") {
-		logging("INFO", "read JSON raw contents from file: " . $location);
-		open(FILE, "<$location") || die "Can't open file: $location";
+		logging("INFO", "HTSP: read raw contents from file: " . $location);
+		if (!open(FILE, "<$location")) {
+			logging("ERROR", "HTSP: can't read raw contents from file: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
@@ -152,15 +166,18 @@ sub protocol_htsp_get_channels($$;$) {
 		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
-			logging("ERROR", "Can't fetch channels(services) via HTSP: " . $response->status_line);
-			exit 1;
+			logging("ERROR", "HTSP: can't fetch channels(services): " . $response->status_line);
+			return(1);
 		};
 
 		$contents_json = $response->content;
 
 		if (defined $channels_file_write_raw) {
 			logging("NOTICE", "JSON write raw channels contents to file: " . $channels_file_write_raw);
-			open(FILE, ">$channels_file_write_raw") || die;
+			if (!open(FILE, ">$channels_file_write_raw")) {
+				logging("ERROR", "HTSP: can't write raw contents to file: " . $channels_file_write_raw . " (" . $! . ")");
+				return(1);
+			};
 			print FILE $contents_json;
 			close(FILE);
 			logging("NOTICE", "JSON raw contents of channels written to file written: " . $channels_file_write_raw);
@@ -235,6 +252,7 @@ sub protocol_htsp_get_channels($$;$) {
 # debug
 # trace:   print contents using Dumper
 # 	 2=print raw contents
+# return code: =0:ok !=0:problem
 #        
 # JSON structure:
 #   {
@@ -272,7 +290,7 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 	$channels_source_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported channels_source_url=$channels_source_url";
+		die "Unsupported channels_source_url=$channels_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -285,14 +303,17 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 	if ($deliverySystem =~ /^DVB-([CST])$/o) {
 		$channel_source = $1;
 	} else {
-		die "unsupported deliverySystem=$deliverySystem";
+		die "unsupported deliverySystem=$deliverySystem - FIX CODE";
 	};
 
 	undef @$channels_p;
 
 	if ($source eq "file") {
-		logging("INFO", "read JSON raw contents from file: " . $location);
-		open(FILE, "<$location") || die "Can't open file: $location";
+		logging("INFO", "HTSP: read raw contents from file: " . $location);
+		if (!open(FILE, "<$location")) {
+			logging("ERROR", "HTSP: can't read raw contents from file: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
@@ -306,15 +327,18 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
-			logging("ERROR", "Can't fetch channels(services) via HTSP: " . $response->status_line);
-			exit 1;
+			logging("ERROR", "HTSP: can't fetch channels(services): " . $response->status_line);
+			return(1);
 		};
 
 		$contents_json = $response->content;
 
 		if (defined $channels_file_write_raw) {
 			logging("NOTICE", "JSON write raw channels contents to file: " . $channels_file_write_raw);
-			open(FILE, ">$channels_file_write_raw") || die;
+			if (!open(FILE, ">$channels_file_write_raw")) {
+				logging("ERROR", "HTSP: can't write raw contents to file: " . $channels_file_write_raw . " (" . $! . ")");
+				return(1);
+			};
 			print FILE $contents_json;
 			close(FILE);
 			logging("NOTICE", "JSON raw contents of channels written to file written: " . $channels_file_write_raw);
@@ -415,6 +439,7 @@ sub protocol_htsp_get_channels_per_adapter($$$;$) {
 # debug
 # trace:   print contents using Dumper
 # 	 2=print raw contents
+# return code: =0:ok !=0:problem
 #        
 # JSON structure:
 #        {
@@ -456,7 +481,7 @@ sub protocol_htsp_get_adapters($$;$) {
 	$adapters_source_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported adapters_source_url=$adapters_source_url";
+		die "Unsupported adapters_source_url=$adapters_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -465,8 +490,11 @@ sub protocol_htsp_get_adapters($$;$) {
 	my $contents_json;
 
 	if ($source eq "file") {
-		logging("INFO", "read JSON raw contents from file: " . $location);
-		open(FILE, "<$location") || die "Can't open file: $location";
+		logging("INFO", "HTSP: read raw contents from file: " . $location);
+		if (!open(FILE, "<$location")) {
+			logging("ERROR", "HTSP: can't read raw contents from file: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
@@ -480,15 +508,18 @@ sub protocol_htsp_get_adapters($$;$) {
 		my $response = $htsp_client->request($req);
 
 		if (! $response->is_success) {
-			logging("ERROR", "Can't fetch adapters via HTSP: " . $response->status_line);
-			exit 1;
+			logging("ERROR", "HTSP: can't fetch adapters: " . $response->status_line);
+			return(1);
 		};
 
 		$contents_json = $response->content;
 
 		if (defined $adapters_file_write_raw) {
-			logging("NOTICE", "JSON write raw adapter contents to file: " . $adapters_file_write_raw);
-			open(FILE, ">$adapters_file_write_raw") || die;
+			logging("NOTICE", "HTSP: write raw adapter contents to file: " . $adapters_file_write_raw);
+			if (!open(FILE, ">$adapters_file_write_raw")) {
+				logging("ERROR", "HTSP: can't write raw contents to file: " . $adapters_file_write_raw . " (" . $! . ")");
+				return(1);
+			};
 			print FILE $contents_json;
 			close(FILE);
 			logging("NOTICE", "JSON raw contents of adapters written to file written: " . $adapters_file_write_raw);
@@ -558,6 +589,7 @@ sub protocol_htsp_get_adapters($$;$) {
 # get confignames via HTSP
 # arg1: pointer to config array
 # arg2: URL of config source
+# return code: =0:ok !=0:problem
 #
 # JSON structure:
 #        {
@@ -580,7 +612,11 @@ sub protocol_htsp_get_confignames($$;$) {
 
 	my $contents_json;
 
-	my $result = protocol_htsp_get_generic(\$contents_json, $confignames_source_url, $confignames_file_write_raw);
+	my $rc = protocol_htsp_get_generic(\$contents_json, $confignames_source_url, $confignames_file_write_raw);
+	if ($rc != 0) {
+		logging("FATAL", "protocol_htsp_get_generic returned an error");
+		return(1);
+	};
 
 	if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} & 0x00010000)) {
 		print "TRACE : JSON contents RAW\n";
@@ -642,6 +678,7 @@ sub protocol_htsp_get_confignames($$;$) {
 # arg1: pointer to config array
 # arg2: URL of config source
 # arg3: optional file to write raw response
+# return code: =0:ok !=0:problem
 #
 # JSON structure:
 #          'dvrSettings' => [
@@ -675,7 +712,11 @@ sub protocol_htsp_get_config($$;$) {
 
 	my $contents_json;
 
-	my $result = protocol_htsp_get_generic(\$contents_json, $configs_source_url, $configs_file_write_raw);
+	my $rc = protocol_htsp_get_generic(\$contents_json, $configs_source_url, $configs_file_write_raw);
+	if ($rc != 0) {
+		logging("FATAL", "protocol_htsp_get_generic returned an error");
+		return(1);
+	};
 
 	if (defined $traceclass{'HTSP'} && ($traceclass{'HTSP'} & 0x00040000)) {
 		print "TRACE : JSON contents RAW\n";
@@ -732,6 +773,7 @@ sub protocol_htsp_get_config($$;$) {
 # debug
 # trace:   print contents using Dumper
 # 	 2=print raw contents
+# return code: =0:ok !=0:problem
 #        
 # JSON structure:
 #        {
@@ -763,7 +805,7 @@ sub protocol_htsp_get_timers($$;$) {
 	$timers_source_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported timers_source_url=$timers_source_url";
+		die "Unsupported timers_source_url=$timers_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -772,8 +814,11 @@ sub protocol_htsp_get_timers($$;$) {
 	my $contents_json;
 
 	if ($source eq "file") {
-		logging("INFO", "read JSON raw contents from file: " . $location);
-		open(FILE, "<$location") || die "Can't open file: $location";
+		logging("INFO", "HTSP: read raw contents from file: " . $location);
+		if (!open(FILE, "<$location")) {
+			logging("ERROR", "HTSP: can't read raw contents from file: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		$contents_json = <FILE>;
 		close(FILE);
 	} else {
@@ -788,14 +833,17 @@ sub protocol_htsp_get_timers($$;$) {
 
 		if (! $response->is_success) {
 			logging("ERROR", "Can't fetch timers via HTSP: " . $response->status_line);
-			exit 1;
+			return(1);
 		};
 
 		$contents_json = $response->content;
 
 		if (defined $timers_file_write_raw) {
-			logging("NOTICE", "JSON write raw adapter contents to file: " . $timers_file_write_raw);
-			open(FILE, ">$timers_file_write_raw") || die;
+			logging("NOTICE", "HTSP: write raw timer contents to file: " . $timers_file_write_raw);
+			if (!open(FILE, ">$timers_file_write_raw")) {
+				logging("ERROR", "HTSP: can't write raw contents to file: " . $timers_file_write_raw . " (" . $! . ")");
+				return(1);
+			};
 			print FILE $contents_json;
 			close(FILE);
 			logging("NOTICE", "JSON raw contents of timers written to file written: " . $timers_file_write_raw);
@@ -859,6 +907,7 @@ sub protocol_htsp_get_timers($$;$) {
 # arg2: point to array of timer pointers to add
 # arg3: point to array of configurations to add/update
 # arg4: URL of destination of actions
+# return code: =0:ok !=0:problem
 #
 # Delete (example):
 #  POST /dvr HTTP/1.1
@@ -883,13 +932,15 @@ sub protocol_htsp_delete_add_timers($$) {
 	$timers_destination_url =~ /^(file|https?):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported timers_destination_url=$timers_destination_url";
+		die "Unsupported timers_destination_url=$timers_destination_url - FIX CODE";
 	};
 
 	my $destination = $1;
 	my $location = $2;
 
 	my %counters;
+
+	my $rc = 0; # ok
 
 	## create HTSP command list
 	my @commands_htsp;
@@ -934,7 +985,10 @@ sub protocol_htsp_delete_add_timers($$) {
 	};
 
 	if ($destination eq "file") {
-		open(FILE, ">$location") || die;
+		if (!open(FILE, ">$location")) {
+			logging("ERROR", "HTSP: can't open file for writing raw contents of timer actions: " . $location . " (" . $! . ")");
+			return(1);
+		};
 		logging("DEBUG", "HTSP: write raw contents of timer actions to file: " . $location);
 		foreach my $line (@commands_htsp) {
 			print FILE $line . "\n";
@@ -959,8 +1013,9 @@ sub protocol_htsp_delete_add_timers($$) {
 			my $response = $htsp_client->request($req);
 
 			if (! $response->is_success) {
-				logging("ERROR", "Problem configuring DVR via HTSP: " . $response->status_line);
-				exit 1;
+				logging("ERROR", "HTSP: problem configuring DVR via HTSP: " . $response->status_line . " (sent: " . $line . ")");
+				$rc = 2; # problem
+				continue;
 			};
 
 			my $result = $response->content;
@@ -974,6 +1029,7 @@ sub protocol_htsp_delete_add_timers($$) {
 				} else {
 					logging("ERROR", "HTSP: delete of timer was not successful: " . $line . " (" . $result . ")");
 					$counters{'delete-failed'}++;
+					$rc = 1; # problem
 				};
 			} elsif ($line =~ /op=createEntry/o) {
 				if ($result =~ m/success/o) {
@@ -982,6 +1038,7 @@ sub protocol_htsp_delete_add_timers($$) {
 				} else {
 					logging("ERROR", "HTSP: problem programming new timer: " . $line . " (" . $result . ")");
 					$counters{'add-failed'}++;
+					$rc = 1; # problem
 				};
 			} elsif ($line =~ /op=saveSettings/o) {
 				if ($result =~ m/success/o) {
@@ -990,9 +1047,11 @@ sub protocol_htsp_delete_add_timers($$) {
 				} else {
 					logging("ERROR", "HTSP: problem creating/updating configuration: " . $line . " (" . $result . ")");
 					$counters{'config-failed'}++;
+					$rc = 1; # problem
 				};
 			} else {
-				die "Unsupported line for checking result: $line";
+				logging("ERROR", "HTSP: unsupported line for checking result: " . $line);
+				$rc = 3; # problem
 			};
 		};
 	};
@@ -1002,8 +1061,9 @@ sub protocol_htsp_delete_add_timers($$) {
 		$summary .= " " . $key . "=" . $counters{$key};
 	};
 
+END:
 	logging("INFO", "HTSP: summary timers" . $summary) if ($summary ne "");
-	return 0;
+	return($rc);
 };
 
 

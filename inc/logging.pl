@@ -90,7 +90,7 @@ sub logging($$) {
 	};
 
 	if ((defined $opt_S) && ($level !~ /^(DEBUG|TRACE)$/o)) {
-		push @logging_summary, $message;
+		push @logging_summary, sprintf("%-6s: %s", $level, $message);
 
 		if ($loglevel < $logging_highestlevel) {
 			# remember highest level

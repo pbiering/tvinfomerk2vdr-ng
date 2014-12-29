@@ -67,7 +67,7 @@ sub protocol_svdrp_get_channels($$;$) {
 	$channels_source_url =~ /^(file|svdrp):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported channels_source_url=$channels_source_url";
+		die "Unsupported channels_source_url=$channels_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -80,8 +80,8 @@ sub protocol_svdrp_get_channels($$;$) {
 	if ($source eq "file") {
 		logging("DEBUG", "SVDRP: read raw contents of channels from file: " . $location);
 		if(!open(FILE, "<$location")) {
-			logging("ERROR", "can't read SVDR raw contents of channels from file: " . $location);
-			exit(1);
+			logging("ERROR", "SVDRP: can't read raw contents of channels from file: " . $location);
+			return(1);
 		};
 		while(<FILE>) {
 			chomp($_);
@@ -97,8 +97,16 @@ sub protocol_svdrp_get_channels($$;$) {
 		logging("DEBUG", "SVDRP: try to read channels from host: $Dest:$Port");
 
 		$SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
+		if (! defined $SVDRP) {
+			logging("ERROR", "SVDRP: can't create handle");
+			return(2);
+		};
 
 		$SVDRP->command("lstc");
+		if ($SVDRP->connected() == 0) {
+			logging("CRIT", "SVDRP: command not successful: lstc");
+			return(1);
+		};
 
 		while($_ = $SVDRP->readoneline) {
 			chomp;
@@ -110,7 +118,7 @@ sub protocol_svdrp_get_channels($$;$) {
 		
 		if (scalar(@channels_raw) == 0) {
 			logging("ERROR", "SVDRP: no channels received");
-			exit 1;
+			return(1);
 		} else {
 			logging("DEBUG", "SVDRP: amount of channels received: " . scalar(@channels_raw));
 		};
@@ -119,7 +127,7 @@ sub protocol_svdrp_get_channels($$;$) {
 			logging("NOTICE", "SVDRP write raw channels contents to file: " . $channels_file_write_raw);
 			if (!open(FILE, ">$channels_file_write_raw")) {
 				logging("ERROR", "SVDR: can't write raw contents of channels to file: ". $channels_file_write_raw . " (" . $! . ")");
-				exit 1;
+				return(1);
 			};
 			foreach my $line (@channels_raw) {
 				print FILE $line . "\n";
@@ -205,7 +213,6 @@ sub protocol_svdrp_get_channels($$;$) {
 		if ($name =~ /^[0-9]+$/o) {
 			logging("TRACE", "SVDRP: skip channel(only containing numbers): " . sprintf("%4d / %s", $vdr_id, $name));
 
-			die;
 			next;
 		};
 
@@ -258,7 +265,7 @@ sub protocol_svdrp_get_timers($$;$) {
 	$timers_source_url =~ /^(file|svdrp):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported timers_source_url=$timers_source_url";
+		die "Unsupported timers_source_url=$timers_source_url - FIX CODE";
 	};
 
 	my $source = $1;
@@ -271,8 +278,8 @@ sub protocol_svdrp_get_timers($$;$) {
 	if ($source eq "file") {
 		logging("DEBUG", "SVDRP: read raw contents of timers from file: " . $location);
 		if(!open(FILE, "<$location")) {
-			logging("ERROR", "can't read SVDR raw contents of timers from file: " . $location);
-			exit(1);
+			logging("ERROR", "SVDRP: can't read raw contents of timers from file: " . $location . " (" . $! . ")");
+			return(1);
 		};
 		while(<FILE>) {
 			chomp($_);
@@ -288,8 +295,16 @@ sub protocol_svdrp_get_timers($$;$) {
 		logging("DEBUG", "SVDRP: try to read timers from host: $Dest:$Port");
 
 		my $SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
+		if (! defined $SVDRP) {
+			logging("ERROR", "SVDRP: can't create handle");
+			return(2);
+		};
 
 		$SVDRP->command("lstt");
+		if ($SVDRP->connected() == 0) {
+			logging("CRIT", "SVDRP: command not successful: lstt");
+			return(1);
+		};
 
 		while($_ = $SVDRP->readoneline) {
 			chomp;
@@ -300,7 +315,7 @@ sub protocol_svdrp_get_timers($$;$) {
 
 		if (scalar(@timers_raw) == 0) {
 			logging("ERROR", "SVDRP: no timers received");
-			exit 1;
+			return(1);
 		} else {
 			logging("DEBUG", "SVDRP: amount of timers received: " . scalar(@timers_raw));
 		};
@@ -310,7 +325,7 @@ sub protocol_svdrp_get_timers($$;$) {
 			logging("NOTICE", "SVDRP write raw timers contents to file: " . $timers_file_write_raw);
 			if (! open(FILE, ">$timers_file_write_raw")) {
 				logging("ERROR", "SVDRP: can't open file for writing raw contents of timers: " . $timers_file_write_raw . " (" . $! . ")");
-				exit 1;
+				return(1);
 			};
 			foreach my $line (@timers_raw) {
 				print FILE $line . "\n";
@@ -337,10 +352,11 @@ sub protocol_svdrp_get_timers($$;$) {
 			next;
 		};
 
-		# check for active timera
+		# check timer status
 		if ($tmstatus == 9) {
-			logging("DEBUG", "SVDRP: timer is currently recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
-			next;
+			#timers which are currently recording -> don't skip for now
+			#logging("DEBUG", "SVDRP: timer is currently recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
+			#next;
 		} elsif ($tmstatus != 1) {
 			logging("DEBUG", "SVDRP: timer is not active/waiting for recording, skip tid=" . $id . " (tmstatus=" . $tmstatus . ")");
 			next;
@@ -348,20 +364,17 @@ sub protocol_svdrp_get_timers($$;$) {
 
 		# convert dor,start,end to unixtime
 		my $start_ut = str2time($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2) . ":00");
-		#my $start_ut = UnixDate(ParseDate($dor . " " . substr($start, 0, 2) . ":" . substr($start, 2, 2)), "%s");
 
 		my $stop_ut;
 
 		if ($stop > $start) {
 			$stop_ut  = str2time($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2) . ":00");
-			#$stop_ut  = UnixDate(ParseDate($dor . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		} else {
 			# shift to next day but same hh:mm
 			$dor =~ /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/o;
 			my ($year,$month,$day) = Add_Delta_Days($1, $2, $3, 1);
 			my $dor_stop = sprintf("%4d%02d%02d", $year, $month, $day);
 			$stop_ut  = str2time($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2) . ":00");
-			#$stop_ut  = UnixDate(ParseDate($dor_stop . " " . substr($stop, 0, 2) . ":" . substr($stop, 2, 2)), "%s");
 		};
 
 		logging("DEBUG", "SVDRP: found timer"
@@ -408,13 +421,15 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	$timers_destination_url =~ /^(file|svdrp):\/\/(.*)$/o;
 
 	if (! defined $1 || ! defined $2) {
-		die "Unsupported timers_destination_url=$timers_destination_url";
+		die "Unsupported timers_destination_url=$timers_destination_url - FIX CODE";
 	};
 
 	my $destination = $1;
 	my $location = $2;
 
 	my %counters;
+
+	my $rc = 0; # ok
 
 	## create SVDRP command list
 	my @commands_svdrp;
@@ -442,7 +457,7 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	if ($destination eq "file") {
 		if (!open(FILE, ">$location")) {
 			logging("ERROR", "SVDRP: can't open file for writing raw contents of timer actions: " . $location . " (" . $! . ")");
-			exit 1;
+			return(1);
 		};
 		logging("DEBUG", "SVDRP: write raw contents of timer actions to file: " . $location);
 		foreach my $line (@commands_svdrp) {
@@ -458,10 +473,18 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 		logging("DEBUG", "SVDRP: try to execute actions on host: $Dest:$Port");
 
 		my $SVDRP = SVDRP->new($Dest,$Port,$verbose,$sim);
+		if (! defined $SVDRP) {
+			logging("ERROR", "SVDRP: can't create handle");
+			$rc = 2; # problem
+		};
 
 		foreach my $line (@commands_svdrp) {
 			logging("DEBUG", "SVDRP: send line: " . $line);
 			my ($result) = $SVDRP->SendCMD($line);
+			if ($SVDRP->connected() == 0) {
+				logging("CRIT", "SVDRP: SendCMD not successful: " . $line);
+				return(1);
+			};
 			logging("DEBUG", "SVDRP: received result: " . $result);
 
 			if ($line =~ /^delt /o) {
@@ -471,6 +494,7 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 				} else {
 					logging("ERROR", "SVDRP: delete of timer was not successful: " . $result);
 					$counters{'delete-failed'}++;
+					$rc = 1; # problem
 				};
 			} elsif ($line =~ /^newt /o) {
 				if ($result =~ m/^(\d+)\s+1:/o) {
@@ -479,9 +503,11 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 				} else {
 					logging("ERROR", "SVDRP: problem programming new timer: $result");
 					$counters{'add-failed'}++;
+					$rc = 1; # problem
 				}
 			} else {
-				die "Unsupported line: $line";
+				logging("ERROR", "SVDRP: unsupported line for checking result: " . $line);
+				$rc = 3; # problem
 			};
 		};
 
@@ -494,7 +520,7 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	};
 
 	logging("INFO", "SVDRP: summary timers" . $summary);
-	return 0;
+	return($rc);
 };
 
 
@@ -504,13 +530,12 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as inc/helperfunc in "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-package SVDRP;
 
 my ($Dest, $Port);
 
 my($SOCKET, $EPGSOCKET, $query, $connected);
 
-sub new {
+sub SVDRP::new {
 	my $invocant = shift;
 	$Dest = shift;
 	$Port = shift;
@@ -524,36 +549,52 @@ sub new {
 	return $self;
 }
 
-sub myconnect {
+sub SVDRP::myconnect {
 	my $this = shift;
 
-		$SOCKET = IO::Socket::INET->new(
-			PeerAddr => $Dest, 
-			PeerPort => $Port, 
-			Proto => 'tcp'
-		) or die;
+	logging("TRACE", "SVDRP: create socket to PeerAddr=" . $Dest . " PeerPort=" . $Port);
 
-		my $line;
-		$line = <$SOCKET>;
-		$connected = 1;
+	$connected = 0;
+
+	$SOCKET = IO::Socket::INET->new(
+		PeerAddr => $Dest, 
+		PeerPort => $Port, 
+		Proto => 'tcp'
+	);
+	if (! defined $SOCKET) {
+		logging("CRIT", "SVDRP: socket creation failed to PeerAddr=" . $Dest . " PeerPort=" . $Port . " (" . $! . ")");
+		return(1);
+	};
+
+	my $line;
+	$line = <$SOCKET>;
+	$connected = 1;
 }
 
-sub close {
+sub SVDRP::close {
 	my $this = shift;
 	if($connected == 1) {
-		command($this, "quit");
-		readoneline($this);
+		SVDRP::command($this, "quit");
+		SVDRP::readoneline($this);
 		close $SOCKET if $SOCKET;
 		$connected = 0;
 	}
 }
 
-sub command {
+sub SVDRP::connected {
+	my $this = shift;
+	return($connected);
+};
+
+
+sub SVDRP::command {
 	my $this = shift;
 	my $cmd = join("", @_);
 
+	logging("TRACE", "SVDRP: send command: " . $cmd);
+
 	if((!defined $connected) || ($connected == 0)) {
-		myconnect($this);
+		SVDRP::myconnect($this) || return(1);
 	}
 	
 	$cmd = $cmd . "\n\r";
@@ -565,10 +606,10 @@ sub command {
 			$query = 1;
 		}
 		no bytes;
-	}
-}
+	};
+};
 
-sub readoneline {
+sub SVDRP::readoneline {
 	my $this = shift;
 	my $line;
 
@@ -586,13 +627,13 @@ sub readoneline {
 	}
 }
 
-sub SendCMD {
+sub SVDRP::SendCMD {
 	my $this = shift;
 	my $cmd = join("", @_); 
 	my @output;
 
-	command($this, $cmd);
-	while($_ = readoneline($this)) {
+	command($this, $cmd) || return(1);
+	while($_ = SVDRP::readoneline($this)) {
 		push(@output, $_);
 	}
 	return(@output);
