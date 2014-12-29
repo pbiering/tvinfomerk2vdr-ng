@@ -15,6 +15,7 @@
 #
 # Changelog:
 # 20141029/bie: new
+# 20141229/bie: improved error handling
 
 use strict;
 use warnings;
@@ -81,6 +82,7 @@ sub dvr_tvheadend_autodetect() {
 sub dvr_tvheadend_init() {
 	# destination port
 	$port = 9981; # default
+
 	if (defined $config{'dvr.port'}) {
 		$port = $config{'dvr.port'};
 	};

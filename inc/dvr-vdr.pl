@@ -15,6 +15,7 @@
 #
 # Changelog:
 # 20141104/bie: partially takeover from tvinfomerk2vdr-ng.pl
+# 20141229/bie: improve error handling
 
 use strict;
 use warnings;
@@ -133,7 +134,12 @@ sub dvr_vdr_get_channels($) {
 
 	$rc = protocol_svdrp_get_channels($channels_ap, $channels_source_url, $file);
 
-	return($rc);
+	if ($rc != 0) {
+		logging("CRIT", "VDR: protocol_svdrp_get_channels returned an error");
+		return(1);
+	};
+
+	return(0);
 };
 
 
@@ -399,7 +405,13 @@ sub dvr_vdr_create_update_delete_timers($$$) {
 
 	# delete/add timers
 	my $rc = protocol_svdrp_delete_add_timers(\@d_timers_delete, \@d_timers_new, $timers_action_url);
-	return($rc);
+
+	if ($rc != 0) {
+		logging("CRIT", "VDR: protocol_svdrp_delete_add_timers returned an error");
+		return(1);
+	};
+
+	return(0);
 };
 
 
