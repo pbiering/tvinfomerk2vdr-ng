@@ -434,8 +434,8 @@ sub protocol_svdrp_delete_add_timers($$;$) {
 	## create SVDRP command list
 	my @commands_svdrp;
 
-	# delete timers
-	foreach my $num (@$timers_num_delete_ap) {
+	# delete timers (highest first, otherwise sequence is destroyed)
+	foreach my $num ({sort $b <=> $a} @$timers_num_delete_ap) {
 		push @commands_svdrp, "delt $num";
 		$counters{'del'}++ if ($destination eq "file");
 	};
