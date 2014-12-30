@@ -243,30 +243,32 @@ if [ "$opt_password_hash" = "1" ]; then
 	exit 0
 fi
 
-## check status file
-unixtime_current=$(date '+%s')
-if [ -n "$file_status" -a -f "$file_status" ]; then
-	logging "DEBUG" "status file found: $file_status"
-	unixtime_status=$(stat -c "%Z" "$file_status")
+if [ "$opt_user_list" != "1" ]; then
+	## check status file
+	unixtime_current=$(date '+%s')
+	if [ -n "$file_status" -a -f "$file_status" ]; then
+		logging "DEBUG" "status file found: $file_status"
+		unixtime_status=$(stat -c "%Z" "$file_status")
 
-	if [ -n "$unixtime_status" ]; then
-		status_delta=$[ $unixtime_current - $unixtime_status ]
-		logging "DEBUG" "delta seconds to last status update: $status_delta"
-		if [ $status_delta -lt $status_delta_minimum ]; then
-			if [ "$no_delta_check" = "1" ]; then
-				logging "INFO" "delta seconds to last status update is less than given minimum, but continue (option -n given): $status_delta / $status_delta_minimum"
-			else
-				logging "INFO" "delta seconds to last status update is less than given minimum, stop: $status_delta / $status_delta_minimum"
-				exit 0
+		if [ -n "$unixtime_status" ]; then
+			status_delta=$[ $unixtime_current - $unixtime_status ]
+			logging "DEBUG" "delta seconds to last status update: $status_delta"
+			if [ $status_delta -lt $status_delta_minimum ]; then
+				if [ "$no_delta_check" = "1" ]; then
+					logging "INFO" "delta seconds to last status update is less than given minimum, but continue (option -n given): $status_delta / $status_delta_minimum"
+				else
+					logging "INFO" "delta seconds to last status update is less than given minimum, stop: $status_delta / $status_delta_minimum"
+					exit 0
+				fi
 			fi
 		fi
 	fi
-fi
 
-if [ "$opt_user_list" != "1" -a -n "$file_status" ]; then
-	# update status file this also blocks rerun
-	logging "DEBUG" "update status file: $file_status"
-	touch $file_status
+	if [ -n "$file_status" ]; then
+		# update status file this also blocks rerun
+		logging "DEBUG" "update status file: $file_status"
+		touch $file_status
+	fi
 fi
 
 if [ $run_by_cron -eq 1 -a "$opt_debug" != "1" ]; then
