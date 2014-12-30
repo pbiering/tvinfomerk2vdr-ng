@@ -632,7 +632,7 @@ sub SVDRP::SendCMD {
 	my $cmd = join("", @_); 
 	my @output;
 
-	command($this, $cmd) || return(1);
+	SVDRP::command($this, $cmd) || return(1);
 	while($_ = SVDRP::readoneline($this)) {
 		push(@output, $_);
 	}
