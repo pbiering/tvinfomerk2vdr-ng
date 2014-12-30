@@ -92,6 +92,7 @@ Debug options:
 	-p	file prefix for data files (-R/-W)
 	-s	simulate run-by-cron
 	-d	debug this wrapper script
+	-n	no minimum delta seconds check
 
 Debug options for called script:
 	-R	read SERVICE/DVR data from file
@@ -120,10 +121,13 @@ END
 }
 
 # option handling
-while getopts "sp:u:dlXcRPTDWNthSLC:?" opt; do
+while getopts "sp:u:dnlXcRPTDWNthSLC:?" opt; do
 	case $opt in
 	    s)
 		run_by_cron=1
+		;;
+	    n)
+		no_delta_check=1
 		;;
 	    P)
 		opt_password_hash=1
@@ -249,8 +253,12 @@ if [ -n "$file_status" -a -f "$file_status" ]; then
 		status_delta=$[ $unixtime_current - $unixtime_status ]
 		logging "DEBUG" "delta seconds to last status update: $status_delta"
 		if [ $status_delta -lt $status_delta_minimum ]; then
-			logging "INFO" "delta seconds to last status update is less than given minimum, stop: $status_delta / $status_delta_minimum"
-			exit 0
+			if [ "$no_delta_check" = "1" ]; then
+				logging "INFO" "delta seconds to last status update is less than given minimum, but continue (option -n given): $status_delta / $status_delta_minimum"
+			else
+				logging "INFO" "delta seconds to last status update is less than given minimum, stop: $status_delta / $status_delta_minimum"
+				exit 0
+			fi
 		fi
 	fi
 fi
