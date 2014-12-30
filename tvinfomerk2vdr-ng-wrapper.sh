@@ -169,7 +169,7 @@ while getopts "sp:u:dnlXcRPTDWNthSLC:?" opt; do
 		logging "INFO" "selected user: $user"
 		;;
 	    l)
-		logging "INFO" "list users"
+		logging "INFO" "list users (use e.g. later with -u <user>)"
 		opt_user_list="1"
 		;;
 	    C)

@@ -959,8 +959,8 @@ sub protocol_htsp_delete_add_timers($$) {
 	};
 
 	
-	# delete timers
-	foreach my $num (@$timers_num_delete_ap) {
+	# delete timers (highest first, otherwise sequence is destroyed)
+	foreach my $num (sort {$b <=> $a} @$timers_num_delete_ap) {
 		push @commands_htsp, "GET /dvr?entryId=" . $num . "&op=cancelEntry";
 		$counters{'del'}++ if ($destination eq "file");
 	};
