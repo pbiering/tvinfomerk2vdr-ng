@@ -2,7 +2,7 @@
 #
 # Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
-# (P) & (C) 2013-2014 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2015 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -20,6 +20,7 @@
 # 20141206/pb: add support for OpenELEC and new properties file
 # 20141227/pb: improve debug options (add -d), allow also script to be executed by root
 # 20141227/pb: add support for status file (tested on ReelBox), prohibit run in case of last run was less then minimum delta
+# 20150103/pb: recode output to ISO8859-1 before sending to mail, also add result token to subject and change priority to high in case of a problem
 
 if [ -f "/etc/openelec-release" ]; then
 	config_base="/storage/.config/tvinfomerk2vdr-ng"
@@ -326,8 +327,15 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		script_options="$script_options -L"
 		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
 		output="`$perl $script $script_flags -U "$username" $script_options 2>&1`"
+		result=$?
+		result_token="OK"
+		option_header_prio=""
+		if [ $result -ne 0 ]; then
+			result_token="PROBLEM"
+			option_header_prio="-a 'X-Priority: 2 (High)'"
+		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
-			echo "$output" | mail -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username" $email
+			echo "$output" | iconv -t ISO8859-1 | mail $option_header_prio -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 		else
 			if [ -n "$output" ]; then
 				logging "DEBUG" "in non-debug mode output would be sent via mail to: $email"
