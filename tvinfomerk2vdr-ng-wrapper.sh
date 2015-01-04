@@ -329,13 +329,15 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		output="`$perl $script $script_flags -U "$username" $script_options 2>&1`"
 		result=$?
 		result_token="OK"
-		option_header_prio=""
+		option_header_prio_opt=""
+		option_header_prio_val=""
 		if [ $result -ne 0 ]; then
 			result_token="PROBLEM"
-			option_header_prio="-a 'X-Priority: 2 (High)'"
+			option_header_prio_opt="-a"
+			option_header_prio_val="X-Priority: 2"
 		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
-			echo "$output" | iconv -c -t ISO8859-1 | mail $option_header_prio -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			echo "$output" | iconv -c -t ISO8859-1 | mail $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 		else
 			if [ -n "$output" ]; then
 				logging "DEBUG" "in non-debug mode output would be sent via mail to: $email"
