@@ -94,7 +94,7 @@ Debug options:
 	-p	file prefix for data files (-R/-W)
 	-s	simulate run-by-cron
 	-d	debug this wrapper script
-	-n	no minimum delta seconds check
+	-n	no minimum delta seconds check and no random delay
 
 Debug options for called script:
 	-R	read SERVICE/DVR data from file
@@ -130,6 +130,7 @@ while getopts "sp:u:dnlXcRPTDWNthSLC:?" opt; do
 		;;
 	    n)
 		no_delta_check=1
+		no_random_delay=1
 		;;
 	    P)
 		opt_password_hash=1
@@ -149,6 +150,7 @@ while getopts "sp:u:dnlXcRPTDWNthSLC:?" opt; do
 	    d)
 		logging "INFO" "debug option selected: wrapper script debug"
 		opt_debug=1
+		no_random_delay=1
 		;;
 	    D)
 		logging "INFO" "debug option selected: script debug"
@@ -273,7 +275,7 @@ if [ "$opt_user_list" != "1" ]; then
 	fi
 fi
 
-if [ $run_by_cron -eq 1 -a "$opt_debug" != "1" ]; then
+if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 	# called by cron
 	random_delay=$[ $RANDOM / 100 ] # 0-5 min
 	logging "DEBUG" "sleep random delay: $random_delay seconds"
