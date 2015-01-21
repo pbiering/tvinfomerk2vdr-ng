@@ -20,7 +20,8 @@
 # 20141206/pb: add support for OpenELEC and new properties file
 # 20141227/pb: improve debug options (add -d), allow also script to be executed by root
 # 20141227/pb: add support for status file (tested on ReelBox), prohibit run in case of last run was less then minimum delta
-# 20150103/pb: recode output to ISO8859-1 before sending to mail, also add result token to subject and change priority to high in case of a problem
+# 20150103/pb: sending mail: add result token to subject and change priority to high in case of a problem
+# 20150121/pb: sending mail: add UTF-8 content type header
 
 if [ -f "/etc/openelec-release" ]; then
 	config_base="/storage/.config/tvinfomerk2vdr-ng"
@@ -337,7 +338,7 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 			option_header_prio_val="X-Priority: 2"
 		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
-			echo "$output" | iconv -c -t ISO8859-1 | mail $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			echo "$output" | mail -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 		else
 			if [ -n "$output" ]; then
 				logging "DEBUG" "in non-debug mode output would be sent via mail to: $email"
