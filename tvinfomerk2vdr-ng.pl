@@ -1668,7 +1668,7 @@ if (scalar(keys %d_timers_action) > 0) {
 		);
 
 		push @logging_actions_dvr, ""
-			. " "  . uc((keys(%{$d_timers_action{$d_timer_num}}))[0])
+			. " "  . substr(uc((keys(%{$d_timers_action{$d_timer_num}}))[0]), 0, 3)
 			. " "  . strftime("%Y-%m-%d %H%M", localtime($$d_timer_hp{'start_ut'}))
 			. "-"  . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
 			. " '" . $$d_timer_hp{'title'} . "'" . " " x ($titlename_max - length($$d_timer_hp{'title'}))
