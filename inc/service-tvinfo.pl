@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2015 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -9,6 +9,7 @@
 #
 # Changelog:
 # 20141031/bie: takeover code from main tvinfomerk2vdr-ng.pl
+# 20150201/bie: cut title if \r was found
 
 use strict;
 use warnings;
@@ -448,6 +449,11 @@ sub service_tvinfo_get_timers($) {
 		if ($$xml_entry_p{'eventtype'} ne "rec") {
 			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
 			next;
+		};
+
+		if ($xml_title =~ /^([^\r]+)[\r]/o) {
+			$xml_title = $1;
+			logging("DEBUG", "TVINFO: '\\r' char found in title, reduce to: " . $xml_title);
 		};
 
 		push @$timers_ap, {
