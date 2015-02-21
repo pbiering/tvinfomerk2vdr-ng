@@ -16,10 +16,6 @@ It also supports multiple SERVICE user accounts (by a shell wrapper):
  - create DVR timers with configurable folder per user
  - detects duplicate timer entries and change folder to special one (covering more than one user)
 
-It also supports multiple TVinfo user accounts (by a shell wrapper):
- - create VDR timers with configurable folder per user
- - detects duplicate entries on 'Merkzettel' and change folder to special one
-
 ******
  See now also devel branch for new features
 ******
