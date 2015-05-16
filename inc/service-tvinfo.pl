@@ -10,6 +10,7 @@
 # Changelog:
 # 20141031/bie: takeover code from main tvinfomerk2vdr-ng.pl
 # 20150201/bie: cut title if \r was found
+# 20150516/bie: remove trailing spaces from title
 
 use strict;
 use warnings;
@@ -453,7 +454,12 @@ sub service_tvinfo_get_timers($) {
 
 		if ($xml_title =~ /^([^\r]+)[\r]/o) {
 			$xml_title = $1;
-			logging("DEBUG", "TVINFO: '\\r' char found in title, reduce to: " . $xml_title);
+			logging("DEBUG", "TVINFO: '\\r' char found in title, reduce to: '" . $xml_title . "'");
+		};
+
+		if ($xml_title =~ / +$/o) {
+			$xml_title =~ s/ +$//o;
+			logging("DEBUG", "TVINFO: trailing spaces found in title, reduce to: '" . $xml_title . "'");
 		};
 
 		push @$timers_ap, {
