@@ -2,7 +2,7 @@
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
-# (P) & (C) 2013-2014 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2015 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -18,6 +18,7 @@
 # 20140630/bie: add static mapping for new "ARD-alpha" (replacing "BR-alpha") and "TV5", blacklist "Sky Select" if (opt_skip_ca_channels==1)
 # 20141108/bie: some rework and rename file to support-channelmap.pl
 # 20141122/bie: catch also "NDR MV", do not overwrite first-hit in normalized map - display message instead
+# 20150908/bie: remove "ARD - " (introduced by TVinfo in September 2015, breaking automatic HD channel mapping)
 
 use strict;
 use warnings;
@@ -111,6 +112,8 @@ sub normalize($) {
 	$input =~ s/DErste/DasErste/g; # expand "D" -> "Das"
 
 	$input =~ s/Bayerisches/BR/g;
+
+	$input =~ s/ARD - (.*)/$1/g; # remove "ARD - " token
 
 	# shift 'HD'
 	$input =~ s/^(.*) HD (.*)$/$1 $2 HD/ig; # WDR HD Köln
