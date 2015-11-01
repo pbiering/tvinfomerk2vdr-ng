@@ -10,6 +10,8 @@
 # Changelog:
 # 20141031/bie: takeover code from main tvinfomerk2vdr-ng.pl
 # 20150201/bie: cut title if \r was found
+# 20150516/bie: remove trailing spaces from title
+# 20151101/bie: round start time down and stop time up to full minutes
 
 use strict;
 use warnings;
@@ -446,6 +448,15 @@ sub service_tvinfo_get_timers($) {
 		my $start_ut = str2time($xml_starttime);
 		my $stop_ut  = str2time($xml_endtime  );
 
+		# round down minute based
+		if (($start_ut % 60) != 0) {
+			$start_ut = int($start_ut / 60) * 60;
+		};
+		# round up minute based
+		if (($stop_ut % 60) != 0) {
+			$stop_ut = int(($stop_ut / 60) + 1) * 60;
+		};
+
 		if ($$xml_entry_p{'eventtype'} ne "rec") {
 			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
 			next;
@@ -453,7 +464,12 @@ sub service_tvinfo_get_timers($) {
 
 		if ($xml_title =~ /^([^\r]+)[\r]/o) {
 			$xml_title = $1;
-			logging("DEBUG", "TVINFO: '\\r' char found in title, reduce to: " . $xml_title);
+			logging("DEBUG", "TVINFO: '\\r' char found in title, reduce to: '" . $xml_title . "'");
+		};
+
+		if ($xml_title =~ / +$/o) {
+			$xml_title =~ s/ +$//o;
+			logging("DEBUG", "TVINFO: trailing spaces found in title, reduce to: '" . $xml_title . "'");
 		};
 
 		push @$timers_ap, {
