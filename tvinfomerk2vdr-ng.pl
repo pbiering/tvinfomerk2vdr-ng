@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2014 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2015 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -34,6 +34,7 @@
 # 201411xx/pb: complete reorg, support now also DVR tvheadend via HTSP
 # 20141129/pb: hibernate support of dedicated SYSTEM (currently not needed)
 # 20141229/pb: improve error handling
+# 20151101/pb: display also seconds of timestamps in MATCH
 
 use strict; 
 use warnings; 
@@ -1427,8 +1428,8 @@ foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timer
 	logging("DEBUG", "SERVICE/DVR: possible new timer tid=" . $s_timer_num . ":"
 		. " s_cid="  . $$s_timer_hp{'cid'}
 		. " d_cid="  . $d_cid
-		. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
-		. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+		. " start="  . strftime("%Y%m%d-%H%M%S", localtime($$s_timer_hp{'start_ut'}))
+		. " stop="   . strftime("%Y%m%d-%H%M%S", localtime($$s_timer_hp{'stop_ut'}))
 		. " title='" . $$s_timer_hp{'title'} . "'"
 	);
 
