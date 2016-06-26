@@ -2,7 +2,7 @@
 #
 # Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
-# (P) & (C) 2013-2015 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2016 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -22,6 +22,10 @@
 # 20141227/pb: add support for status file (tested on ReelBox), prohibit run in case of last run was less then minimum delta
 # 20150103/pb: sending mail: add result token to subject and change priority to high in case of a problem
 # 20150121/pb: sending mail: add UTF-8 content type header
+# 20160511/pb: skip execution in case runlevel is not between 2 and 5
+# 20160530/pb: minimum uptime 120 sec (boot_delay_minimum), write latest status of each user to status file
+
+# TODO/pb: in error case with rc=4 send only one e-mail per day
 
 if [ -f "/etc/openelec-release" ]; then
 	config_base="/storage/.config/tvinfomerk2vdr-ng"
@@ -56,6 +60,7 @@ files_test="$config $files_executables"
 dirs_test="$var_base"
 
 status_delta_minimum=900	# 15 min
+boot_delay_minimum=120		# 2 min
 
 if [ -n "$var_base" ]; then
 	file_status="$var_base/tvinfomerk2vdr-ng-wrapper.status"
@@ -278,9 +283,27 @@ fi
 if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 	# called by cron
 	random_delay=$[ $RANDOM / 100 ] # 0-5 min
-	logging "DEBUG" "sleep random delay: $random_delay seconds"
+	uptime_sec=$(cat /proc/uptime | awk '{ printf "%d", $1 }')
+	if [ $[ $uptime_sec + $random_delay ] -lt $boot_delay_minimum ]; then
+		logging "DEBUG" "increase sleep delay because of uptime ($uptime_sec) + random delay ($random_delay) < boot_delay_minimum ($boot_delay_minimum)"
+		random_delay=$[ $boot_delay_minimum - $uptime_sec ]
+		logging "DEBUG" "sleep delay: $random_delay seconds"
+	else
+		logging "DEBUG" "sleep random delay: $random_delay seconds"
+	fi
 	sleep $random_delay
 fi
+
+runlevel=$(/sbin/runlevel | awk '{ print $2 }')
+if [ -n "$runlevel" ]; then
+	if [ $runlevel -lt 2 -o $runlevel -gt 5 ]; then
+		logging "NOTICE" "runlevel ($runlevel) is not between 2 and 5, skip execution"
+		exit 1
+	fi
+fi
+
+date_start_ut="$(date '+%s')"
+date_start="$(date '+%Y%m%d %H%M%S %Z')"
 
 cat "$config" | grep -v '^#' | while IFS=":" read username password folder email other; do
 	if [ -n "$user" -a  "$user" != "$username" ]; then
@@ -303,9 +326,9 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 	fi
 
 	if [ -z "$script_flags" ]; then
-		logging "INFO" "run tvinfomerk2vdr-ng with username: $username (folder:$folder)"
+		logging "INFO" "run $script with username: $username (folder:$folder)"
 	else
-		logging "INFO" "run tvinfomerk2vdr-ng with username: $username (folder:$folder) and options: $script_flags"
+		logging "INFO" "run $script with username: $username (folder:$folder) and options: $script_flags"
 	fi
 
 	script_options=""
@@ -319,25 +342,32 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		script_options="$script_options --rp $properties"
 	fi
 
+	result_token="OK"
+
 	if [ $run_by_cron -eq 0 -o -z "$email" ]; then
 		if [ $run_by_cron -eq 1 ]; then
 			script_options="$script_options -L"
 		fi
 		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
 		$perl $script $script_flags -U "$username" $script_options 
+		result=$?
+		if [ $result -ne 0 ]; then
+			result_token="PROBLEM"
+		fi
 	else
 		script_flags="$script_flags -S"
 		script_options="$script_options -L"
 		[ "$opt_debug" = "1" ] && logging "DEBUG" "Execute: $script $script_flags -U \"$username\" $script_options"
 		output="`$perl $script $script_flags -U "$username" $script_options 2>&1`"
 		result=$?
-		result_token="OK"
 		option_header_prio_opt=""
 		option_header_prio_val=""
 		if [ $result -ne 0 ]; then
 			result_token="PROBLEM"
 			option_header_prio_opt="-a"
 			option_header_prio_val="X-Priority: 2"
+		elif echo "$output" | grep -q "^ WARN"; then
+			result_token="WARN"
 		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
 			echo "$output" | mail -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
@@ -351,6 +381,16 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 				logging "DEBUG" "no important output, no e-mail would be sent via mail to: $email"
 			fi
 		fi
+	fi
+
+	# update status
+	if grep -q "^$username:" $file_status; then
+		# user exists
+		perl -pi -e "s/^$username:.*/$user:$date_start_ut:$date_start:$result:$result_token/" $file_status
+		logging "DEBUG" "update existing result status of user: $username"
+	else
+		echo "$username:$date_start_ut:$date_start:$result:$result_token" >>$file_status
+		logging "DEBUG" "add result status of user: $username"
 	fi
 
 	if [ -z "$user" ]; then
