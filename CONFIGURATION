@@ -50,9 +50,11 @@ $ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password>
 On last lines on any executed action following should be shown:
 
 e.g.
-    INFO  : HTSP: summary timers del=1 add=1 config=1
+    INFO  : HTSP: summary timers del=1 add=1 config=1 (OpenELEC)
+    INFO  : SVDRP: summary timers add=1 (Reelbox)
+    INFO  : result of DVR create/update/delete: OK
 
-If e.g. following is shwon, check messages on NOTICE|WARN level for reason:
+If e.g. following is shown, check messages on NOTICE|WARN level for reason:
     WARN  : timers skipped: 1
 
 
@@ -62,7 +64,7 @@ Create backup
 $ cp tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
 
 Write (updated) config
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -F <folder> --wp
+$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> [-F <folder>] --wp
 
 
 Run again using default properties file:
@@ -83,13 +85,13 @@ Output messages should appear now in syslog
 
 For onging execution by cron the wrapper needs to be configure now
 ------------------------------------------------------------------
-Move properties file to created one during INSTALL
+Move properties file to created directory during INSTALL
  $ mv tvinfomerk2vdr-ng.properties CONFIGSTORAGEPATH
 
 Copy example file
  $ cp tvinfomerk2vdr-ng-users.conf.example CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
  
-Add users
+Add users (don't care about ERROR message regarding SERVICE username not defined
  $  perl ./tvinfomerk2vdr-ng.pl --pp --rp CONFIGSTORAGEPATH/tvinfomerk2vdr-ng.properties | egrep "^service\.tvinfo\.user\..+\.password" | awk -F. '{ print $4 "::::" }' >>CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
 age/.config/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-users.conf
 
@@ -102,5 +104,5 @@ Run with user (dry-run, but everthing should look fine)
  $ ./tvinfomerk2vdr-ng-wrapper.sh -u USER -N
 
 Run without specifying a user (more than one user can be configured)
- $ ./tvinfomerk2vdr-ng-wrapper.sh -N
+ $ ./tvinfomerk2vdr-ng-wrapper.sh -N -n
 

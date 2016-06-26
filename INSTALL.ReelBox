@@ -1,28 +1,41 @@
 tvinfomerk2vdr-ng/ReelBox
 ==========================
 
+Also supported: BM2LTS
+
 Prerequisites
 -------------
-- install missing Perl modules
-	libxml-simple-perl
-	libdate-calc-perl
-	(more coming next)
+- execute tasks documented in INSTALL
 
+- install missing Perl modules
+    # apt-get install libxml-simple-perl
+
+    additional candidates are: libdate-calc-perl
 
 Installation
 ------------
-- unpack (this automatically creates the subdirectory)
-	unzip -d /opt /tmp/tvinfomerk2vdr-ng.zip
 
-Create Configuration directory
-------------------------------
+*One-time installation* 
+- unpack (this automatically creates the subdirectory)
+    # unzip -d /opt /tmp/tvinfomerk2vdr-ng.zip
+- rename the master directory
+    # mv /opt/tvinfomerk2vdr-ng-master /opt/tvinfomerk2vdr-ng
+
+*'continuous' update installation*
+- clone git repository
+    # cd /opt
+    # git clone https://github.com/pbiering/tvinfomerk2vdr-ng.git
+
+Create Configuration and temporary storage directory
+----------------------------------------------------
     # mkdir /etc/opt/tvinfomerk2vdr-ng
+    # mkdir /var/opt/tvinfomerk2vdr-ng
 
 Configuration
 -------------
 - change to destination directory
-	cd /opt/tvinfomerk2vdr-ng
-	cd /opt/tvinfomerk2vdr-ng-devel (in case of devel branch)
+    # cd /opt/tvinfomerk2vdr-ng
+    # cd /opt/tvinfomerk2vdr-ng-devel (in case of devel branch)
 
 see now CONFIGURATION
 
@@ -36,5 +49,5 @@ on reboot & every 30 minutes
 */30 * * * * root /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh
 END
 
-See also then syslog output:
+See also then syslog output after minimum 30 min:
 # tail -f /var/log/syslog

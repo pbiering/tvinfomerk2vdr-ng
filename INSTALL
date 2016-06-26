@@ -1,14 +1,25 @@
 tvinfomerk2vdr-ng
 =================
 
+
 Prerequisites:
 --------------
+*One-time installation*
 - download package as ZIP from https://github.com/pbiering/tvinfomerk2vdr-ng/
+   e.g. (for branch master)
+	# curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/master
+
    e.g. (for branch devel)
 	# curl -o /tmp/tvinfomerk2vdr-ng.zip https://codeload.github.com/pbiering/tvinfomerk2vdr-ng/zip/devel
+
+
+*'continuous' update installation*
+ (see INSTALL.*)
+
 
 Installation
 ------------
 - following installations depending on system
 	INSTALL.OpenELEC
 	INSTALL.ReelBox
+

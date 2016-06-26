@@ -3,14 +3,24 @@ tvinfomerk2vdr-ng/OpenELEC
 
 Prerequisites
 -------------
+- execute tasks documented in INSTALL
+
 - Installation of ActivePerl
 	see INSTALL.ActivePerl
 
 
 Installation
 ------------
+*One-time installation*
 - unpack (this automatically creates the subdirectory)
     # unzip -d /storage /tmp/tvinfomerk2vdr-ng.zip
+- rename the master directory
+    # mv /storage/tvinfomerk2vdr-ng-master /storage/tvinfomerk2vdr-ng
+
+*'continuous' update installation*
+- clone git repository
+    # cd /storage
+    # git clone https://github.com/pbiering/tvinfomerk2vdr-ng.git
 
 Create Configuration directory
 ------------------------------
