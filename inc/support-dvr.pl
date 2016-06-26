@@ -210,7 +210,7 @@ sub dvr_convert_timers_channels($$) {
 			};
 		};
 	};
-
+	return 0;
 };
 
 #### END
