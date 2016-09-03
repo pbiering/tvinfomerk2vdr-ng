@@ -19,6 +19,7 @@
 # 20141108/bie: some rework and rename file to support-channelmap.pl
 # 20141122/bie: catch also "NDR MV", do not overwrite first-hit in normalized map - display message instead
 # 20150908/bie: remove "ARD - " (introduced by TVinfo in September 2015, breaking automatic HD channel mapping)
+# 20160903/bie: create mapping for "EinsFestival" <-> "ONE"
 
 use strict;
 use warnings;
@@ -54,6 +55,7 @@ my %channel_translations = (
 	'Comedy Central'       =>	'NICK/COMEDY',
 	'TV5'		       =>       'TV5MONDE EUROPE', 
 	'BR-alpha'	       =>	'ARD-alpha',
+	'EinsFestival'	       =>	'ONE',
 );
 
 ## match method number -> text
