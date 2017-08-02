@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014 - 2015 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2017 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -12,6 +12,7 @@
 # 20150201/bie: cut title if \r was found
 # 20150516/bie: remove trailing spaces from title
 # 20151101/bie: round start/stop time down to full minutes
+# 20170802/bie: skip timer if channel_id can't be retrieved (inconsistency between station.php and schedule.php)
 
 use strict;
 use warnings;
@@ -465,6 +466,11 @@ sub service_tvinfo_get_timers($) {
 		if ($xml_title =~ / +$/o) {
 			$xml_title =~ s/ +$//o;
 			logging("DEBUG", "TVINFO: trailing spaces found in title, reduce to: '" . $xml_title . "'");
+		};
+
+		if (!defined $tvinfo_channel_id_by_name{$xml_channel}) {
+			logging("WARN", "TVINFO: SKIP (channel_id not defined): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
+			next;
 		};
 
 		push @$timers_ap, {
