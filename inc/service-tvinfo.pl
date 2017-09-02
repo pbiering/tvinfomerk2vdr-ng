@@ -13,6 +13,7 @@
 # 20150516/bie: remove trailing spaces from title
 # 20151101/bie: round start/stop time down to full minutes
 # 20170802/bie: skip timer if channel_id can't be retrieved (inconsistency between station.php and schedule.php)
+# 20170902/bie: honor service_login_state to decide between login problem and empty timer list
 
 use strict;
 use warnings;
@@ -35,6 +36,7 @@ our %debugclass;
 our $progname;
 our $progversion;
 our %config;
+our $service_login_state;
 
 ## activate module
 our  @service_list_supported;
@@ -304,6 +306,11 @@ sub service_tvinfo_get_channels($$;$) {
 #   0x20: XML dump schedules
 #   0x40: XML dump each schedules
 #
+# return values
+# 0: ok
+# 1: error
+# 2: list empty
+#
 # XML structure:
 #$VAR1 = {
 #          'uid' => '795006859',
@@ -406,8 +413,13 @@ sub service_tvinfo_get_timers($) {
 	};
 
 	if ($xml_raw !~ /epg_schedule_entry/) {
-		logging ("ERROR", "TVINFO: XML timer is empty or username/passwort not proper, can't proceed");
-		return(1);
+		if ($service_login_state == 1) {
+			logging("NOTICE", "TVINFO: XML timer list is empty (assumed, because login worked before)");
+			return(2);
+		} else {
+			logging ("ERROR", "TVINFO: XML timer is empty or username/passwort not proper, can't proceed");
+			return(1);
+		};
 	} else {
 		my $xml_list_p = @$data{'epg_schedule_entry'};
 

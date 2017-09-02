@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2015 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2017 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -35,6 +35,7 @@
 # 20141129/pb: hibernate support of dedicated SYSTEM (currently not needed)
 # 20141229/pb: improve error handling
 # 20151101/pb: display also seconds of timestamps in MATCH
+# 20170902/pb: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
 
 use strict; 
 use warnings; 
@@ -47,7 +48,7 @@ binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
 our $progname = "tvinfomerk2vdr-ng.pl";
-our $progversion = "1.0.0";
+our $progversion = "1.0.1";
 
 ## Requirements:
 # Ubuntu: libxml-simple-perl libdate-calc-perl
@@ -242,6 +243,9 @@ our $logging_highestlevel = 7;
 
 my @logging_actions_dvr;
 my @logging_actions_service;
+
+## service login state
+our $service_login_state = 0;	# 0=undef, 1=successful
 
 ###############################################################################
 ## Functions
@@ -1148,6 +1152,9 @@ if (scalar(@channels_service) == 0) {
 	goto("END");
 };
 
+logging("INFO", "SERVICE: amount of channels is non-zero - OK: " . scalar(@channels_service));
+$service_login_state = 1;
+
 #logging("DEBUG", "SERVICE channels before filtering/expanding (amount: " . scalar(@channels_service) . "):");
 #print_service_channels(\@channels_service);
 
@@ -1281,7 +1288,11 @@ my @timers_service;
 
 $rc = $module_functions{'service'}->{$setup{'service'}}->{'get_timers'}(\@timers_service);
 
-if ($rc != 0) {
+if ($rc == 2) {
+	logging("NOTICE", "SERVICE: get_timers returned an empty list, nothing more todo - STOP");
+	$rc_exit = 0;
+	goto("END");
+} elsif ($rc != 0) {
 	logging("CRIT", "SERVICE: get_timers returned an error - STOP");
 	$rc_exit = 4;
 	goto("END");
