@@ -8,9 +8,11 @@ Prerequisites
 - execute tasks documented in INSTALL
 
 - install missing Perl modules
-    # apt-get install libxml-simple-perl
+    # apt-get install libxml-simple-perl libcrypt-ssleay-perl
 
     additional candidates are: libdate-calc-perl
+
+(Ubuntu 'lucid' is not available anymore on "de.archive", replace it with "old-releases" in /etc/apt/sources.list)
 
 Installation
 ------------
