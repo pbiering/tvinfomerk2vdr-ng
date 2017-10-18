@@ -14,6 +14,7 @@
 # 20151101/bie: round start/stop time down to full minutes
 # 20170802/bie: skip timer if channel_id can't be retrieved (inconsistency between station.php and schedule.php)
 # 20170902/bie: honor service_login_state to decide between login problem and empty timer list
+# 20171018/bie: remove comments in XML before parsing
 
 use strict;
 use warnings;
@@ -171,6 +172,11 @@ sub service_tvinfo_get_channels($$;$) {
 		};
 
 		$xml_raw = $response->content;
+
+		if ($xml_raw =~ /<!-- (.*) -->/o) {
+			logging("NOTICE", "TVINFO: stations XML contains comment, remove it");
+			$xml_raw =~ s/<!-- (.*) -->//;
+		};
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
@@ -375,6 +381,11 @@ sub service_tvinfo_get_timers($) {
 		};
 
 		$xml_raw = $response->content;
+
+		if ($xml_raw =~ /<!-- (.*) -->/o) {
+			logging("NOTICE", "TVINFO: schedule XML contains comment, remove it");
+			$xml_raw =~ s/<!-- (.*) -->//;
+		};
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
