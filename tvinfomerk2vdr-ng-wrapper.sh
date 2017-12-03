@@ -389,14 +389,16 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		fi
 	fi
 
-	# update status
-	if grep -q "^$username:" $file_status; then
-		# user exists
-		perl -pi -e "s/^$username:.*/$user:$date_start_ut:$date_start:$result:$result_token/" $file_status
-		logging "DEBUG" "update existing result status of user: $username"
-	else
-		echo "$username:$date_start_ut:$date_start:$result:$result_token" >>$file_status
-		logging "DEBUG" "add result status of user: $username"
+	if [ -n "$file_status" ]; then
+		# update status
+		if grep -q "^$username:" $file_status; then
+			# user exists
+			perl -pi -e "s/^$username:.*/$user:$date_start_ut:$date_start:$result:$result_token/" $file_status
+			logging "DEBUG" "update existing result status of user: $username"
+		else
+			echo "$username:$date_start_ut:$date_start:$result:$result_token" >>$file_status
+			logging "DEBUG" "add result status of user: $username"
+		fi
 	fi
 
 	if [ -z "$user" ]; then
