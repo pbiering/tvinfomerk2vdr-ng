@@ -2,7 +2,7 @@
 #
 # Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
-# (P) & (C) 2013-2016 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2017 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -24,6 +24,7 @@
 # 20150121/pb: sending mail: add UTF-8 content type header
 # 20160511/pb: skip execution in case runlevel is not between 2 and 5
 # 20160530/pb: minimum uptime 120 sec (boot_delay_minimum), write latest status of each user to status file
+# 20171203/pb: do not stop in case defined var directory can't be written for status file, disable write to status file instead and display a warning
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -205,8 +206,13 @@ for val in $dirs_test; do
 		exit 1
 	fi
 	if [ ! -w "${val}" ]; then
-		logging "ERROR" "can't write to given directory: ${val}"
-		exit 1
+		if [ "${val}" = "$var_base" ]; then
+			logging "WARN" "can't write to given directory: ${val} -> disable write to status file"
+			file_status=""
+		else
+			logging "ERROR" "can't write to given directory: ${val}"
+			exit 1
+		fi
 	fi
 done
 
