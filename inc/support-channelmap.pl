@@ -20,6 +20,7 @@
 # 20141122/bie: catch also "NDR MV", do not overwrite first-hit in normalized map - display message instead
 # 20150908/bie: remove "ARD - " (introduced by TVinfo in September 2015, breaking automatic HD channel mapping)
 # 20160903/bie: create mapping for "EinsFestival" <-> "ONE"
+# 20171203/bie: add normalized alternative name mapping
 
 use strict;
 use warnings;
@@ -303,6 +304,7 @@ sub channelmap($$$$) {
 
 		# search for name in DVR channels (translated)
 		if (defined $name_translated) {
+			logging("TRACE", "Channelmap: process service channel translated name: " . $name_translated);
 			if (defined $dvr_channels_id_by_name{$name_translated}->{'cid'}) {
 				logging("DEBUG", "Channelmap: service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
 				$cid = $dvr_channels_id_by_name{$name_translated}->{'cid'};
@@ -312,6 +314,7 @@ sub channelmap($$$$) {
 		};
 
 		# search for name in DVR channels (normalized)
+		logging("TRACE", "Channelmap: process service channel normalized name: " . $name_normalized);
 		if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
 			logging("DEBUG", "Channelmap: service channel name hit (normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 			$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
@@ -322,11 +325,33 @@ sub channelmap($$$$) {
 		# search for name in DVR channels (translated & normalized)
 		if (defined $name_translated) {
 			my $name_normalized = normalize($name_translated);
+			logging("TRACE", "Channelmap: process service channel translated/normalized name: " . $name_normalized);
 			if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
 				logging("DEBUG", "Channelmap: service channel name hit (translated & normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 				$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 				$match_method = 4; # translated+normalized
 				goto('DVR_ID_FOUND');
+			};
+		};
+
+		# run through normalized alternative names
+		if (defined $altnames) {
+			logging("TRACE", "Channelmap: process service channel normalized alternative name list: " . $altnames);
+			for my $altname (split '\|', $altnames) {
+				if ($altname eq $name) {
+					# don't check default name again
+					next;
+				};
+				my $name_normalized = normalize($altname);
+				logging("TRACE", "Channelmap: process service channel normalized alternative name: " . $name_normalized);
+
+				if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
+					# normalized hit
+					logging("DEBUG", "Channelmap: service channel name hit (normalized alternative name): " . $name_normalized);
+					$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
+					$match_method = 7; # normalized alternative name
+					goto('DVR_ID_FOUND');
+				};
 			};
 		};
 
