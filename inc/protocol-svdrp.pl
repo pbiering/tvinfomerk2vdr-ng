@@ -2,7 +2,7 @@
 #
 # Support functions for SVDRP backends like VDR API
 #
-# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2018 by by Peter Bieringer <pb@bieringer.de>
 #
 # SVDRP related code taken from file: inc/helperfunc
 #   Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher in "tvmovie2vdr"
@@ -18,6 +18,7 @@
 # 20141106/bie: partially takeover from tvinfomerk2vdr-ng.pl, more abstraction
 # 20141122/bie: import SVDRP related code from inc/helperfunc, minor cleanup
 # 20141221/bie: improve split of raw channel line, fix bug in separating alternative names
+# 20180921/bie: catch uninitialized "connected"
 
 use strict;
 use warnings;
@@ -573,7 +574,7 @@ sub SVDRP::myconnect {
 
 sub SVDRP::close {
 	my $this = shift;
-	if($connected == 1) {
+	if(defined $connected && $connected == 1) {
 		SVDRP::command($this, "quit");
 		SVDRP::readoneline($this);
 		close $SOCKET if $SOCKET;
