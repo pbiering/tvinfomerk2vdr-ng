@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014 - 2017 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2018 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -15,6 +15,7 @@
 # 20170802/bie: skip timer if channel_id can't be retrieved (inconsistency between station.php and schedule.php)
 # 20170902/bie: honor service_login_state to decide between login problem and empty timer list
 # 20171018/bie: remove comments in XML before parsing
+# 20180921/bie: remove unexpected content before XML starts (server side intermediate? bug), move XML comment remover from before storing to before parsing
 
 use strict;
 use warnings;
@@ -173,11 +174,6 @@ sub service_tvinfo_get_channels($$;$) {
 
 		$xml_raw = $response->content;
 
-		if ($xml_raw =~ /<!-- (.*) -->/o) {
-			logging("NOTICE", "TVINFO: stations XML contains comment, remove it");
-			$xml_raw =~ s/<!-- (.*) -->//;
-		};
-
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
 			if(! open(FILE, ">$WriteStationsXML")) {
@@ -194,6 +190,16 @@ sub service_tvinfo_get_channels($$;$) {
 		print "#### TVINFO/stations XML NATIVE RESPONSE BEGIN ####\n";
 		print $xml_raw;
 		print "#### TVINFO/stations XML NATIVE RESPONSE END   ####\n";
+	};
+
+	if ($xml_raw =~ /<!-- (.*) -->/o) {
+		logging("NOTICE", "TVINFO: stations XML contains comment, remove it");
+		$xml_raw =~ s/<!-- (.*) -->//;
+	};
+
+	if ($xml_raw =~ /^(.+)<\?xml.*/o) {
+		logging("NOTICE", "TVINFO: stations XML contains unexpected chars before XML starts, remove it: $1");
+		$xml_raw =~ s/$1//;
 	};
 
 	if ($xml_raw =~ /encoding="UTF-8"/o) {
@@ -382,11 +388,6 @@ sub service_tvinfo_get_timers($) {
 
 		$xml_raw = $response->content;
 
-		if ($xml_raw =~ /<!-- (.*) -->/o) {
-			logging("NOTICE", "TVINFO: schedule XML contains comment, remove it");
-			$xml_raw =~ s/<!-- (.*) -->//;
-		};
-
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
 			if (! open(FILE, ">$WriteScheduleXML")) {
@@ -403,6 +404,16 @@ sub service_tvinfo_get_timers($) {
 		print "#### TVINFO/timers XML NATIVE RESPONSE BEGIN ####\n";
 		print $xml_raw;
 		print "#### TVINFO/timers XML NATIVE RESPONSE END   ####\n";
+	};
+
+	if ($xml_raw =~ /<!-- (.*) -->/o) {
+		logging("NOTICE", "TVINFO: schedule XML contains comment, remove it");
+		$xml_raw =~ s/<!-- (.*) -->//;
+	};
+
+	if ($xml_raw =~ /^(.+)<\?xml.*/o) {
+		logging("NOTICE", "TVINFO: schedule XML contains unexpected chars before XML starts, remove it: $1");
+		$xml_raw =~ s/$1//;
 	};
 
 	# Replace encoding from -15 to -1, otherwise XML parser stops
