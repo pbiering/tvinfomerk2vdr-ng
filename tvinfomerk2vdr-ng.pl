@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2017 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2018 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -36,6 +36,7 @@
 # 20141229/pb: improve error handling
 # 20151101/pb: display also seconds of timestamps in MATCH
 # 20170902/pb: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
+# 20181010/pb: be not quiet in debug/trace mode when calling channelmap
 
 use strict; 
 use warnings; 
@@ -118,6 +119,7 @@ my $rc_exit = 0;
 my $rc;
 
 our $debug = 0;
+our $quiet = 1;
 
 our $foldername_max = 15;
 our $titlename_max  = 40;
@@ -467,6 +469,9 @@ if (defined $opt_h) {
 $verbose = 1 if (defined $opt_v || defined $opt_D || defined $opt_T);
 $debug = 1 if $opt_D;
 
+if ($verbose == 1) {
+	$quiet = 0;
+};
 
 ###############################################################################
 # Basic information
@@ -1182,7 +1187,7 @@ my %flags_channelmap;
 %flags_channelmap = (
 	'force_hd_channels'    => 1,
 	'source_precedence'    => "CST",
-	'quiet'                => 1,
+	'quiet'                => $quiet,
 );
 
 $rc = channelmap(\%service_cid_to_dvr_cid_map, \@channels_dvr_filtered, \@channels_service_filtered, \%flags_channelmap);
@@ -1204,7 +1209,7 @@ my %service_cid_to_dvr_cid_map_unfiltered;
 %flags_channelmap = (
 	'force_hd_channels'    => 0,
 	'source_precedence'    => "CST",
-	'quiet'                => 1,
+	'quiet'                => $quiet,
 );
 
 if (defined $opt_show_channelmap_suggestions) {
