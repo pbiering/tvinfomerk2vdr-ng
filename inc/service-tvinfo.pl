@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014 - 2018 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2019 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -16,6 +16,7 @@
 # 20170902/bie: honor service_login_state to decide between login problem and empty timer list
 # 20171018/bie: remove comments in XML before parsing
 # 20180921/bie: remove unexpected content before XML starts (server side intermediate? bug), move XML comment remover from before storing to before parsing
+# 20190126/bie: add retry mechanism around web requests, add 'curl' fallback
 
 use strict;
 use warnings;
@@ -162,17 +163,34 @@ sub service_tvinfo_get_channels($$;$) {
 		# Fetch 'Sender' via XML interface
 		logging ("INFO", "TVINFO: fetch stations via XML interface");
 
-		my $request = request_replace_tokens("http://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
+		my $request = request_replace_tokens("https://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
 		logging("DEBUG", "TVINFO: start request: " . $request);
 
-		my $response = $tvinfo_client->request(GET "$request");
-		if (! $response->is_success) {
-			logging("ERROR", "TVINFO: can't fetch stations: " . $response->status_line);
-			return(1);
+		my $retry_max = 1;
+		my $retry = 0;
+		my $response;
+		my $interval = 20;
+
+		while ($retry < $retry_max) {
+			$response = $tvinfo_client->request(GET "$request");
+			if (! $response->is_success) {
+				$retry++;
+				logging("NOTICE", "TVINFO: can't fetch stations (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+				sleep($interval);
+			};
 		};
 
-		$xml_raw = $response->content;
+		if (! $response->is_success) {
+			logging("WARN", "TVINFO: can't fetch stations (fallback to 'curl' now): " . $response->status_line);
+			$xml_raw = `curl -k '$request' 2>/dev/null`;
+			if ($xml_raw !~ /^<\?xml /o) {
+				logging("ERROR", "TVINFO: can't fetch stations: " . substr($xml_raw, 0, 320) . "...");
+				return(1);
+			};
+		} else {
+			$xml_raw = $response->content;
+		};
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
@@ -376,17 +394,34 @@ sub service_tvinfo_get_timers($) {
 		# Fetch 'Merkliste' via XML interface
 		logging ("INFO", "TVINFO: fetch timers via XML interface");
 
-		my $request = request_replace_tokens("http://www.tvinfo.de/share/openepg/schedule.php?username=<USERNAME>&password=<PASSWORDHASH>");
+		my $request = request_replace_tokens("https://www.tvinfo.de/share/openepg/schedule.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
 		logging("DEBUG", "TVINFO: start request: " . $request);
 
-		my $response = $tvinfo_client->request(GET "$request");
-		if (! $response->is_success) {
-			logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . $response->status_line);
-			return(1);
+		my $retry_max = 1;
+		my $retry = 0;
+		my $response;
+		my $interval = 20;
+
+		while ($retry < $retry_max) {
+			$response = $tvinfo_client->request(GET "$request");
+			if (! $response->is_success) {
+				$retry++;
+				logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+				sleep($interval);
+			};
 		};
 
-		$xml_raw = $response->content;
+		if (! $response->is_success) {
+			logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (fallback to 'curl' now): " . $response->status_line);
+			$xml_raw = `curl -k '$request' 2>/dev/null`;
+			if ($xml_raw !~ /^<\?xml /o) {
+				logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . substr($xml_raw, 0, 320) . "...");
+				return(1);
+			};
+		} else {
+			$xml_raw = $response->content;
+		};
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
