@@ -17,6 +17,7 @@
 # 20171018/bie: remove comments in XML before parsing
 # 20180921/bie: remove unexpected content before XML starts (server side intermediate? bug), move XML comment remover from before storing to before parsing
 # 20190126/bie: add retry mechanism around web requests, add 'curl' fallback
+# 20190129/bie: use only curl for web requests for now
 
 use strict;
 use warnings;
@@ -49,8 +50,9 @@ $module_functions{'service'}->{'tvinfo'}->{'get_channels'} = \&service_tvinfo_ge
 $module_functions{'service'}->{'tvinfo'}->{'get_timers'} = \&service_tvinfo_get_timers;
 
 ## preparation for web requests
+my $user_agent = "Mozilla/4.0 ($progname $progversion)";
 my $tvinfo_client = LWP::UserAgent->new;
-$tvinfo_client->agent("Mozilla/4.0 ($progname $progversion)");
+$tvinfo_client->agent($user_agent);
 
 if (defined $config{'proxy'}) {
 	$tvinfo_client->proxy('http', $config{'proxy'});
@@ -172,25 +174,26 @@ sub service_tvinfo_get_channels($$;$) {
 		my $response;
 		my $interval = 20;
 
-		while ($retry < $retry_max) {
-			$response = $tvinfo_client->request(GET "$request");
-			if (! $response->is_success) {
-				$retry++;
-				logging("NOTICE", "TVINFO: can't fetch stations (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
-				sleep($interval);
-			};
-		};
-
-		if (! $response->is_success) {
-			logging("WARN", "TVINFO: can't fetch stations (fallback to 'curl' now): " . $response->status_line);
-			$xml_raw = `curl -k '$request' 2>/dev/null`;
+#		while ($retry < $retry_max) {
+#			$response = $tvinfo_client->request(GET "$request");
+#			if (! $response->is_success) {
+#				$retry++;
+#				logging("NOTICE", "TVINFO: can't fetch stations (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+#				sleep($interval);
+#			};
+#		};
+#
+#		if (! $response->is_success) {
+#			logging("WARN", "TVINFO: can't fetch stations (fallback to 'curl' now): " . $response->status_line);
+			logging("NOTICE", "TVINFO: fetch stations via 'curl': " . $request);
+			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
 			if ($xml_raw !~ /^<\?xml /o) {
 				logging("ERROR", "TVINFO: can't fetch stations: " . substr($xml_raw, 0, 320) . "...");
 				return(1);
 			};
-		} else {
-			$xml_raw = $response->content;
-		};
+#		} else {
+#			$xml_raw = $response->content;
+#		};
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
@@ -403,25 +406,26 @@ sub service_tvinfo_get_timers($) {
 		my $response;
 		my $interval = 20;
 
-		while ($retry < $retry_max) {
-			$response = $tvinfo_client->request(GET "$request");
-			if (! $response->is_success) {
-				$retry++;
-				logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
-				sleep($interval);
-			};
-		};
-
-		if (! $response->is_success) {
-			logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (fallback to 'curl' now): " . $response->status_line);
-			$xml_raw = `curl -k '$request' 2>/dev/null`;
+#		while ($retry < $retry_max) {
+#			$response = $tvinfo_client->request(GET "$request");
+#			if (! $response->is_success) {
+#				$retry++;
+#				logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+#				sleep($interval);
+#			};
+#		};
+#
+#		if (! $response->is_success) {
+#			logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (fallback to 'curl' now): " . $response->status_line);
+			logging("NOTICE", "TVINFO: fetch XML timers via 'curl' now: " . $request);
+			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
 			if ($xml_raw !~ /^<\?xml /o) {
 				logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . substr($xml_raw, 0, 320) . "...");
 				return(1);
 			};
-		} else {
-			$xml_raw = $response->content;
-		};
+#		} else {
+#			$xml_raw = $response->content;
+#		};
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);

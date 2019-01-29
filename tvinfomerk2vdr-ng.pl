@@ -49,7 +49,7 @@ binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
 our $progname = "tvinfomerk2vdr-ng.pl";
-our $progversion = "1.0.1";
+our $progversion = "1.0.2";
 
 ## Requirements:
 # Ubuntu: libxml-simple-perl libdate-calc-perl
