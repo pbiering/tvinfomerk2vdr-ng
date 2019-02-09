@@ -185,7 +185,7 @@ sub service_tvinfo_get_channels($$;$) {
 #
 #		if (! $response->is_success) {
 #			logging("WARN", "TVINFO: can't fetch stations (fallback to 'curl' now): " . $response->status_line);
-			logging("NOTICE", "TVINFO: fetch stations via 'curl': " . $request);
+			logging("DEBUG", "TVINFO: fetch stations via 'curl': " . $request);
 			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
 			if ($xml_raw !~ /^<\?xml /o) {
 				logging("ERROR", "TVINFO: can't fetch stations: " . substr($xml_raw, 0, 320) . "...");
@@ -417,7 +417,7 @@ sub service_tvinfo_get_timers($) {
 #
 #		if (! $response->is_success) {
 #			logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (fallback to 'curl' now): " . $response->status_line);
-			logging("NOTICE", "TVINFO: fetch XML timers via 'curl' now: " . $request);
+			logging("DEBUG", "TVINFO: fetch XML timers via 'curl' now: " . $request);
 			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
 			if ($xml_raw !~ /^<\?xml /o) {
 				logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . substr($xml_raw, 0, 320) . "...");
