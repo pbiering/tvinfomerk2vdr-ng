@@ -272,6 +272,12 @@ sub service_tvinfo_get_channels($$;$) {
 			};
 		};
 
+		# add name without " (HD|SD)" also to altnames
+		if ($name =~ /(.*) (HD|SD)$/o) {
+			$altnames .= "|" if ($altnames ne "");
+			$altnames .= $1;
+		};
+
 		$tvinfo_AlleSender_id_list{$id}->{'name'} = $name;
 		$tvinfo_AlleSender_id_list{$id}->{'altnames'} = $altnames;
 
