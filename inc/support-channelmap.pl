@@ -2,7 +2,7 @@
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
-# (P) & (C) 2013-2018 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2019 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -22,6 +22,7 @@
 # 20160903/bie: create mapping for "EinsFestival" <-> "ONE"
 # 20171203/bie: add normalized alternative name mapping
 # 20181010/bie: fix/expand altnames handling for DVR
+# 20190704/bie: ignore '+' found on "Anixe+"
 
 use strict;
 use warnings;
@@ -149,6 +150,7 @@ sub normalize($) {
 	$input =~ s/\.//g if ($input !~ /^a\.tv/);
 	$input =~ s/_//g;
 	$input =~ s/-//g;
+	$input =~ s/\+//g;
 
 	$input =~ s/ *//og; # remove inbetween spaces
 
