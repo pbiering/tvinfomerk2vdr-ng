@@ -11,6 +11,7 @@
 #
 # Changelog:
 # 20141107/bie: new
+# 20190713/bie: fix UTF-8 conversion
 
 use strict;
 use warnings;
@@ -331,7 +332,7 @@ sub print_service_dvr_channel_map_special($$;$) {
 		$AlleSender_count++;
 
 		my $name     = $tvinfo_AlleSender_id_list{$id}->{'name'};
-		my ($vdr_name, $vdr_bouquet) = split /;/, encode("iso-8859-1", decode("utf8", ${$channels[$vdr_id - 1]}{'name'}));
+		my ($vdr_name, $vdr_bouquet) = split /;/, ${$channels[$vdr_id - 1]}{'name'};
 		$vdr_bouquet = "" if (! defined $vdr_bouquet);
 
 		my $checked = ""; my $ca = "";

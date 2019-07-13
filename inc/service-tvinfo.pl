@@ -18,6 +18,7 @@
 # 20180921/bie: remove unexpected content before XML starts (server side intermediate? bug), move XML comment remover from before storing to before parsing
 # 20190126/bie: add retry mechanism around web requests, add 'curl' fallback
 # 20190129/bie: use only curl for web requests for now
+# 20190713/bie: fix UTF-8 conversion
 
 use strict;
 use warnings;
@@ -293,7 +294,7 @@ sub service_tvinfo_get_channels($$;$) {
 		$tvinfo_channel_name_by_id{$id} = $name;
 		$tvinfo_channel_id_by_name{$name} = $id;
 
-		if ((defined $ENV{'LANG'}) && ($ENV{'LANG'} =~ /utf8/o)) {
+		if ((defined $ENV{'LANG'}) && ($ENV{'LANG'} =~ /utf-?8/io)) {
 			# recode
 			$name = encode("iso-8859-1", decode("utf8", $name));
 			$altnames = encode("iso-8859-1", decode("utf8", $altnames));

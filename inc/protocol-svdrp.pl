@@ -2,7 +2,7 @@
 #
 # Support functions for SVDRP backends like VDR API
 #
-# (C) & (P) 2014 - 2018 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2019 by by Peter Bieringer <pb@bieringer.de>
 #
 # SVDRP related code taken from file: inc/helperfunc
 #   Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher in "tvmovie2vdr"
@@ -19,6 +19,7 @@
 # 20141122/bie: import SVDRP related code from inc/helperfunc, minor cleanup
 # 20141221/bie: improve split of raw channel line, fix bug in separating alternative names
 # 20180921/bie: catch uninitialized "connected"
+# 20190713/bie: fix UTF-8 conversion
 
 use strict;
 use warnings;
@@ -140,6 +141,10 @@ sub protocol_svdrp_get_channels($$;$) {
 	};
 
 	foreach my $line (@channels_raw) {
+		# special char conversion
+		$line =~ s/Ã¾/Ã¼/g;
+		$line = encode("iso-8859-1", decode("utf8", $line));
+
 		logging("TRACE", "SVDRP: parse raw channel line: " . $line);
 
 		my ($vdr_id, $temp);
@@ -183,7 +188,7 @@ sub protocol_svdrp_get_channels($$;$) {
 
 		# split name and group (aka provider)
 		my $group;
-		($name, $group) = split /;/, encode("iso-8859-1", decode("utf8", $name)), 2;
+		($name, $group) = split /;/, $name, 2;
 
 		if (! defined $group) {
 			logging("TRACE", "SVDRP: skip channel(undefined group): " . sprintf("%4d / %s", $vdr_id, $name));
