@@ -2,7 +2,7 @@
 #
 # Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
-# (P) & (C) 2013-2017 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2020 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -25,6 +25,7 @@
 # 20160511/pb: skip execution in case runlevel is not between 2 and 5
 # 20160530/pb: minimum uptime 120 sec (boot_delay_minimum), write latest status of each user to status file
 # 20171203/pb: do not stop in case defined var directory can't be written for status file, disable write to status file instead and display a warning
+# 20200216/pb: move runlevel check in front of random delay
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -286,6 +287,16 @@ if [ "$opt_user_list" != "1" ]; then
 	fi
 fi
 
+runlevel=$(/sbin/runlevel | awk '{ print $2 }')
+if [ -n "$runlevel" ]; then
+	if [ $runlevel -lt 2 -o $runlevel -gt 5 ]; then
+		logging "NOTICE" "runlevel ($runlevel) is not between 2 and 5, skip execution"
+		exit 1
+	else
+		logging "DEBUG" "runlevel ($runlevel) found between 2 and 5, continue"
+	fi
+fi
+
 if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 	# called by cron
 	random_delay=$[ $RANDOM / 100 ] # 0-5 min
@@ -298,14 +309,6 @@ if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 		logging "DEBUG" "sleep random delay: $random_delay seconds"
 	fi
 	sleep $random_delay
-fi
-
-runlevel=$(/sbin/runlevel | awk '{ print $2 }')
-if [ -n "$runlevel" ]; then
-	if [ $runlevel -lt 2 -o $runlevel -gt 5 ]; then
-		logging "NOTICE" "runlevel ($runlevel) is not between 2 and 5, skip execution"
-		exit 1
-	fi
 fi
 
 date_start_ut="$(date '+%s')"
