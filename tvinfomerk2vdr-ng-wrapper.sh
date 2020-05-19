@@ -25,7 +25,7 @@
 # 20160511/pb: skip execution in case runlevel is not between 2 and 5
 # 20160530/pb: minimum uptime 120 sec (boot_delay_minimum), write latest status of each user to status file
 # 20171203/pb: do not stop in case defined var directory can't be written for status file, disable write to status file instead and display a warning
-# 20200216/pb: move runlevel check in front of random delay
+# 20200216/pb: implement system check and add it on several steps
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -127,6 +127,22 @@ Account1:Password1:Folder1:test1@example.com
 Account2:Password2:Folder2:test2@example.com
 
 END
+}
+
+
+## check system still in normal state
+check_system() {
+	## check for runlevel 2-5
+	runlevel=$(/sbin/runlevel | awk '{ print $2 }')
+	if [ -n "$runlevel" ]; then
+		if [ $runlevel -lt 2 -o $runlevel -gt 5 ]; then
+			logging "NOTICE" "runlevel ($runlevel) is not between 2 and 5, skip execution"
+			return 1
+		else
+			logging "DEBUG" "runlevel ($runlevel) found between 2 and 5, continue"
+		fi
+	fi
+	return 0
 }
 
 # option handling
@@ -287,15 +303,8 @@ if [ "$opt_user_list" != "1" ]; then
 	fi
 fi
 
-runlevel=$(/sbin/runlevel | awk '{ print $2 }')
-if [ -n "$runlevel" ]; then
-	if [ $runlevel -lt 2 -o $runlevel -gt 5 ]; then
-		logging "NOTICE" "runlevel ($runlevel) is not between 2 and 5, skip execution"
-		exit 1
-	else
-		logging "DEBUG" "runlevel ($runlevel) found between 2 and 5, continue"
-	fi
-fi
+## check system
+check_system || exit 1
 
 if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 	# called by cron
@@ -311,10 +320,13 @@ if [ $run_by_cron -eq 1 -a "$no_random_delay" != "1" ]; then
 	sleep $random_delay
 fi
 
+## check system again
+check_system || exit 1
+
 date_start_ut="$(date '+%s')"
 date_start="$(date '+%Y%m%d %H%M%S %Z')"
 
-cat "$config" | grep -v '^#' | while IFS=":" read username password folder email other; do
+grep -v '^#' "$config" | while IFS=":" read username password folder email other; do
 	if [ -n "$user" -a  "$user" != "$username" ]; then
 		logging "INFO" "skip user: $username"
 		continue
@@ -324,6 +336,9 @@ cat "$config" | grep -v '^#' | while IFS=":" read username password folder email
 		logging "INFO" "List entry: $username:$password"
 		continue
 	fi
+
+	## check system again
+	check_system || exit 1
 
 	file="$opt_file_prefix$username"
 
