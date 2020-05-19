@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014 - 2019 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014-2020 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -19,6 +19,7 @@
 # 20190126/bie: add retry mechanism around web requests, add 'curl' fallback
 # 20190129/bie: use only curl for web requests for now
 # 20190713/bie: fix UTF-8 conversion
+# 20200519/bie: ignore older duplicated timers
 
 use strict;
 use warnings;
@@ -513,7 +514,7 @@ sub service_tvinfo_get_timers($) {
 
 	# Run through entries of XML contents of 'Merkliste'
 
-	foreach my $xml_entry_p (@xml_list) {
+	foreach my $xml_entry_p (sort { $b->{'uid'} <=> $a->{'uid'} } @xml_list) {
 		if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x40)) {
 			print "####XML PARSED ENTRY BEGIN####\n";
 			print Dumper($xml_entry_p);
@@ -552,6 +553,18 @@ sub service_tvinfo_get_timers($) {
 			logging("WARN", "TVINFO: SKIP (channel_id not defined): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
 			next;
 		};
+
+		# check for existing timer
+		my $duplicate = 0;
+		for my $timer_p (@$timers_ap) {
+			if (($timer_p->{'start_ut'} eq $start_ut)
+			    && ($timer_p->{'stop_ut'} eq $stop_ut)
+			    && ($timer_p->{'cid'} eq $tvinfo_channel_id_by_name{$xml_channel})) {
+				logging("WARN", "TVINFO: SKIP (duplicate found to tid=$timer_p->{'tid'}): tid=$$xml_entry_p{'uid'} start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
+				$duplicate = 1;
+			};
+		};
+		next if ($duplicate == 1);
 
 		push @$timers_ap, {
 			'tid'          => $$xml_entry_p{'uid'},

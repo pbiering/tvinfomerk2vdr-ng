@@ -1511,6 +1511,8 @@ foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timer
 	};
 };
 
+logging("DEBUG", "MATCH result list of service timers found (amount: $#s_timers_num_found): @s_timers_num_found");
+
 ## check for timers provided by SERVICE not found in DVR
 logging("DEBUG", "SERVICE/DVR: check for timers provided by service but not found in DVR");
 # create helper hash
