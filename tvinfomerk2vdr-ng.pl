@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2018 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2020 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -37,6 +37,7 @@
 # 20151101/pb: display also seconds of timestamps in MATCH
 # 20170902/pb: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
 # 20181010/pb: be not quiet in debug/trace mode when calling channelmap
+# 20201023/pb: add hint for hashed TVinfo password
 
 use strict; 
 use warnings; 
@@ -790,8 +791,8 @@ if (defined $config{'service.user'}) {
 		if ($setup{'service'} eq "tvinfo") {
 			# TODO: move such option checks in service module
 			if ($config{'service.password'} !~ /^{MD5}/) {
-				logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons)");
 				$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
+				logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons): $config{'service.password'}");
 			};
 		};
 	};
