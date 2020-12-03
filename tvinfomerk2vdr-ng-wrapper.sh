@@ -399,7 +399,7 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email other
 				echo "$output" | mail -n -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 			else
 				# mailx (e.g. Fedora)
-				echo "$output" | mail -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+				echo "$output" | iconv -t UTF-8 -t ISO8859-1 | mail -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 			fi
 		else
 			if [ -n "$output" ]; then
