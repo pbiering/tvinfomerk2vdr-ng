@@ -26,6 +26,7 @@
 # 20160530/pb: minimum uptime 120 sec (boot_delay_minimum), write latest status of each user to status file
 # 20171203/pb: do not stop in case defined var directory can't be written for status file, disable write to status file instead and display a warning
 # 20200216/pb: implement system check and add it on several steps
+# 20201203/pb: detect and support mailx from Fedora Linux
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -394,7 +395,12 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email other
 			result_token="WARN"
 		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
-			echo "$output" | mail -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			if mail -V | grep -q Mailutils; then
+				echo "$output" | mail -n -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			else
+				# mailx (e.g. Fedora)
+				echo "$output" | mail -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			fi
 		else
 			if [ -n "$output" ]; then
 				logging "DEBUG" "in non-debug mode output would be sent via mail to: $email"
