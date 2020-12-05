@@ -38,6 +38,7 @@
 # 20170902/pb: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
 # 20181010/pb: be not quiet in debug/trace mode when calling channelmap
 # 20201023/pb: add hint for hashed TVinfo password
+# 20201205/pb: add optional trace level for debug class
 
 use strict; 
 use warnings; 
@@ -312,7 +313,7 @@ Debug options:
          -v                        Show verbose messages
          -D	                   Debug Mode
          -T	                   Trace Mode
-         -C <class>[,...]          Debug/Trace Classes: $debug_class_string ('*' for all)
+         -C <class>[=<trace>][,..] Debug/Trace Classes: $debug_class_string ('*' for all) with optional trace level
          -X	                   XML Debug Mode
          -N	                   No real DVR change action (do not delete/add timers but write an action fike)
          -W                        Write (all)  raw responses to files
@@ -878,8 +879,20 @@ if (defined $properties{"dvr.host." . $config{'dvr.host'} . ".credentials"}) {
 # Debug Class handling
 if (defined $opt_C) {
 	foreach my $entry (split ",", $opt_C) {
+		# split optional traceclass value
+		my $trace;
+		if ($entry =~ /^(.*)=(.*)$/o) {
+			$entry = $1;
+			$trace = $2;
+			if ($trace =~ /0x(.*)/o) {
+				$trace = hex($1);
+			};
+		};
 		if (defined $debug_class{$entry}) {
 			$debug_class{$entry} = 1;
+			if (defined $trace ) {
+				$traceclass{$entry} = $trace;
+			};
 		} elsif ($entry eq "*") {
 			# enable all
 			foreach my $key (keys %debug_class) {
