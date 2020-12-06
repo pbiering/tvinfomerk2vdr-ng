@@ -242,7 +242,7 @@ sub service_tvinfo_get_channels($$;$) {
 	};
 
 	# Parse XML content
-	my $xml = xml2hash $xml_raw, order => 0;
+	$xml = xml2hash $xml_raw, order => 0;
 
 	if (not defined $xml->{'stations'}) {
 		logging ("ALERT", "TVINFO: XML 'Sender' has NO 'stations' tree, please check for latest version and contact asap script development");
