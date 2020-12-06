@@ -20,6 +20,7 @@
 # 20190129/bie: use only curl for web requests for now
 # 20190713/bie: fix UTF-8 conversion
 # 20200519/bie: ignore older duplicated timers
+# 20201206/bie: simplify code for read/write of raw XML files
 
 use strict;
 use warnings;
@@ -31,7 +32,6 @@ use HTTP::Request::Common;
 use HTTP::Date;
 use XML::Simple;
 use Encode;
-#use Date::Manip;
 use Digest::MD5 qw(md5_hex);
 
 ## debug/trace information
@@ -153,14 +153,11 @@ sub service_tvinfo_get_channels($$;$) {
 		};
 		# load 'Sender' (stations) from file
 		logging("INFO", "TVINFO: read XML contents of stations from file: " . $ReadStationsXML);
-		if(!open(FILE, "<$ReadStationsXML")) {
+		if(!open(FILE, '<:raw', $ReadStationsXML)) {
 			logging("ERROR", "TVINFO: can't read XML contents of stations from file: " . $ReadStationsXML);
 			return(1);
 		};
-		binmode(FILE);
-		while(<FILE>) {
-			$xml_raw .= $_;
-		};
+		read FILE, $xml_raw, -s FILE;
 		close(FILE);
 		logging("INFO", "TVINFO: XML contents of stations read from file: " . $ReadStationsXML);
 	} else {
@@ -199,7 +196,7 @@ sub service_tvinfo_get_channels($$;$) {
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
-			if(! open(FILE, ">$WriteStationsXML")) {
+			if(! open(FILE, '>:raw', $WriteStationsXML)) {
 				logging("ERROR", "TVINFO: can't write XML contents of stations to file: " . $WriteStationsXML . " (" . $! . ")");
 			} else {
 				print FILE $xml_raw;
@@ -391,14 +388,11 @@ sub service_tvinfo_get_timers($) {
 		};
 		# load 'Merkzettel' from file
 		logging("INFO", "TVINFO: read XML contents of timers from file: " . $ReadScheduleXML);
-		if(!open(FILE, "<$ReadScheduleXML")) {
+		if(!open(FILE, '<:raw', $ReadScheduleXML)) {
 			logging("ERROR", "TVINFO: can't read XML contents of timers from file: " . $ReadScheduleXML);
 			return(1);
 		};
-		binmode(FILE);
-		while(<FILE>) {
-			$xml_raw .= $_;
-		};
+		read FILE, $xml_raw, -s FILE;
 		close(FILE);
 		logging("INFO", "TVINFO: XML contents of timers read from file: " . $ReadScheduleXML);
 	} else {
@@ -437,7 +431,7 @@ sub service_tvinfo_get_timers($) {
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
-			if (! open(FILE, ">$WriteScheduleXML")) {
+			if (! open(FILE, '>:raw', $WriteScheduleXML)) {
 				logging("ERROR", "TVINFO: can't write XML contents of timers to file: " . $WriteScheduleXML . " (" . $! . ")");
 				return(1);
 			};
