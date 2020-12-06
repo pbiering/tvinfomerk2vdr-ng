@@ -21,6 +21,7 @@
 # 20190713/bie: fix UTF-8 conversion
 # 20200519/bie: ignore older duplicated timers
 # 20201206/bie: simplify code for read/write of raw XML files
+# 20201206/bie: replace XML::Simple with XML::Hash::LX (fix strange UTF-8 conversion issues)
 
 use strict;
 use warnings;
@@ -30,7 +31,7 @@ use Data::Dumper;
 use LWP;
 use HTTP::Request::Common;
 use HTTP::Date;
-use XML::Simple;
+use XML::Hash::LX;
 use Encode;
 use Digest::MD5 qw(md5_hex);
 
@@ -227,9 +228,14 @@ sub service_tvinfo_get_channels($$;$) {
 	};
 
 	# Parse XML content
-	$xml = new XML::Simple;
+	my $xml = xml2hash $xml_raw, order => 0;
 
-	my $data = $xml->XMLin($xml_raw);
+	if (not defined $xml->{'stations'}) {
+		logging ("ALERT", "TVINFO: XML 'Sender' has NO 'stations' tree, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	my $data = $xml->{'stations'};
 
 	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x02)) {
 		print "#### TVINFO/stations XML PARSED RESPONSE BEGIN ####\n";
@@ -237,27 +243,33 @@ sub service_tvinfo_get_channels($$;$) {
 		print "#### TVINFO/stations XML PARSED RESPONSE END   ####\n";
 	};
 
-	# Version currently missing
-	if ($$data{'version'} ne "1.0") {
-		logging ("ALERT", "XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
+	if (! defined $$data{'-version'}) {
+		logging ("ALERT", "TVINFO: XML 'Sender' has NO 'version' element, please check for latest version and contact asap script development");
 		return(1);
 	};
 
-	if ($xml_raw !~ /stations/) {
+	if ($$data{'-version'} ne "1.0") {
+		logging ("ALERT", "TVINFO: XML 'Sender' has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	my $xml_list_p = $$data{'station'};
+
+	if (not defined $xml_list_p) {
 		logging ("ERROR", "TVINFO: XML don't contain any stations, empty or username/passwort not proper, can't proceed");
 		return(1);
 	} else {
-		my $xml_list_p = @$data{'station'};
-
-		logging ("INFO", "TVINFO: XML contains amount of stations: " . scalar(keys %$xml_list_p));
+		logging ("INFO", "TVINFO: XML contains amount of stations: " . scalar(@$xml_list_p));
 	};
 
-	my $xml_root_p = @$data{'station'};
+	foreach my $entry (@$xml_list_p) {
+		my $xml_root_p = $entry;
 
-	foreach my $name (sort keys %$xml_root_p) {
-		my $id = $$xml_root_p{$name}->{'id'};
+		my $name = $entry->{'name'};
 
-		my $altnames_p = $$xml_root_p{$name}->{'altnames'}->{'altname'};
+		my $id = $entry->{'id'};
+
+		my $altnames_p = $entry->{'altnames'}->{'altname'};
 
 		my $altnames = "";
 
@@ -281,7 +293,7 @@ sub service_tvinfo_get_channels($$;$) {
 		$tvinfo_AlleSender_id_list{$id}->{'altnames'} = $altnames;
 
 		my $selected = 0;
-		if (defined $$xml_root_p{$name}->{'selected'} && $$xml_root_p{$name}->{'selected'} eq "selected") {
+		if (defined $xml_root_p->{'-selected'} && $xml_root_p->{'-selected'} eq "selected") {
 			$selected = 1;
 			$tvinfo_MeineSender_id_list{$id}->{'name'} = $name;
 			$tvinfo_MeineSender_id_list{$id}->{'altnames'} = $altnames;
@@ -461,17 +473,28 @@ sub service_tvinfo_get_timers($) {
 	$xml_raw =~ s/(encoding="ISO-8859)-15(")/$1-1$2/;
 
 	# Parse XML content
-	my $xml = new XML::Simple;
-	my $data = $xml->XMLin($xml_raw);
+	my $xml = xml2hash $xml_raw;
+
+	if (not defined $xml->{'epg_schedule'}) {
+		logging ("ALERT", "TVINFO: XML timer list has NO 'epg_schedule' tree, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	my $data = $xml->{'epg_schedule'};
 
 	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x20)) {
 		print "#### TVINFO/timers XML PARSED RESPONSE BEGIN ####\n";
 		print Dumper($data);
-		print "#### TVINOF/timers XML PARSED RESPONSE END   ####\n";
+		print "#### TVINFO/timers XML PARSED RESPONSE END   ####\n";
 	};
 
-	if ($$data{'version'} ne "1.0") {
-		logging ("ALERT", "TVINFO: XML of timer has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
+	if (! defined $$data{'-version'}) {
+		logging ("ALERT", "TVINFO: XML timer list has NO 'version' element, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	if ($$data{'-version'} ne "1.0") {
+		logging ("ALERT", "TVINFO: XML timer list has not supported version: " . $$data{'version'} . " please check for latest version and contact asap script development");
 		return(1);
 	};
 
@@ -508,7 +531,7 @@ sub service_tvinfo_get_timers($) {
 
 	# Run through entries of XML contents of 'Merkliste'
 
-	foreach my $xml_entry_p (sort { $b->{'uid'} <=> $a->{'uid'} } @xml_list) {
+	foreach my $xml_entry_p (sort { $b->{'-uid'} <=> $a->{'-uid'} } @xml_list) {
 		if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x40)) {
 			print "####XML PARSED ENTRY BEGIN####\n";
 			print Dumper($xml_entry_p);
@@ -516,10 +539,10 @@ sub service_tvinfo_get_timers($) {
 		};
 		# logging ("DEBUG", "entry uid: " . $$entry_p{'uid'});
 
-		my $xml_starttime = $$xml_entry_p{'starttime'};
-		my $xml_endtime   = $$xml_entry_p{'endtime'};
-		my $xml_title     = $$xml_entry_p{'title'};
-		my $xml_channel   = $$xml_entry_p{'channel'};
+		my $xml_starttime = $xml_entry_p->{'-starttime'};
+		my $xml_endtime   = $xml_entry_p->{'-endtime'};
+		my $xml_title     = $xml_entry_p->{'title'};
+		my $xml_channel   = $xml_entry_p->{'-channel'};
 
 		my $start_ut = str2time($xml_starttime);
 		my $stop_ut  = str2time($xml_endtime  );
@@ -528,7 +551,7 @@ sub service_tvinfo_get_timers($) {
 		$start_ut = int($start_ut / 60) * 60;
 		$stop_ut  = int($stop_ut  / 60) * 60;
 
-		if ($$xml_entry_p{'eventtype'} ne "rec") {
+		if ($$xml_entry_p{'-eventtype'} ne "rec") {
 			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
 			next;
 		};
@@ -561,7 +584,7 @@ sub service_tvinfo_get_timers($) {
 		next if ($duplicate == 1);
 
 		push @$timers_ap, {
-			'tid'          => $$xml_entry_p{'uid'},
+			'tid'          => $$xml_entry_p{'-uid'},
 			'start_ut'     => $start_ut,
 			'stop_ut'      => $stop_ut,
 			'cid'          => $tvinfo_channel_id_by_name{$xml_channel},
@@ -571,14 +594,13 @@ sub service_tvinfo_get_timers($) {
 		};
 
 		logging("DEBUG", "TVINFO: found timer:"
-			. " tid="      . $$xml_entry_p{'uid'}
+			. " tid="      . $$xml_entry_p{'-uid'}
 			. " start="    . $xml_starttime . " (" . strftime("%Y%m%d-%H%M", localtime($start_ut)) . ")"
 			. " end="      . $xml_endtime   . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
 			. " channel='" . $xml_channel . "' (" . $tvinfo_channel_id_by_name{$xml_channel} . ")"
 			. " title='"   . $xml_title . "'"
                         . " s_d="      . "tvinfo:" . $config{'service.user'}
 		);
-
 	};
 
 	logging("DEBUG", "TVINFO: finish XML timer analysis");
