@@ -28,6 +28,7 @@
 # 20200216/pb: implement system check and add it on several steps
 # 20201203/pb: detect and support mailx from Fedora Linux
 # 20201207/pb: explicitly use mailx on Fedora Linux
+# 20201216/pb: remove iconv in front of mailx
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -398,7 +399,7 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email other
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
 			if [ -x /usr/bin/mailx.mailx ]; then
 				# mailx (e.g. Fedora)
-				echo "$output" | iconv -t UTF-8 -t ISO8859-1 | /usr/bin/mailx.mailx -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+				echo "$output" | /usr/bin/mailx.mailx -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 			else
 				echo "$output" | mail -n -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 			fi
