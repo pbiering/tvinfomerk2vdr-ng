@@ -39,6 +39,7 @@
 # 20181010/pb: be not quiet in debug/trace mode when calling channelmap
 # 20201023/pb: add hint for hashed TVinfo password
 # 20201205/pb: add optional trace level for debug class
+# 20201222/pb: check for existing DVR channel before try to match timer
 
 use strict; 
 use warnings; 
@@ -1465,7 +1466,8 @@ foreach my $s_timer_num (sort { $s_timers_entries{$a}->{'start_ut'} <=> $s_timer
 
 	foreach my $d_timer_num (sort { $d_timers_entries{$a}->{'start_ut'} <=> $d_timers_entries{$b}->{'start_ut'} } @d_timers_num) {
 		next if (grep /^$d_timer_num$/, @d_timers_num_found); # already found
-		next if (grep /^$d_timer_num$/, @d_timers_num_skipped); # already 
+		next if (grep /^$d_timer_num$/, @d_timers_num_skipped); # already
+		next if (! defined $service_cid_to_dvr_cid_map{$$s_timer_hp{'cid'}}->{'cid'}); # dvr channel missing
 
 		my $d_timer_hp = $d_timers_entries{$d_timer_num};
 
