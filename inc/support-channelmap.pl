@@ -2,7 +2,7 @@
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
-# (P) & (C) 2013-2019 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2020 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -23,6 +23,7 @@
 # 20171203/bie: add normalized alternative name mapping
 # 20181010/bie: fix/expand altnames handling for DVR
 # 20190704/bie: ignore '+' found on "Anixe+"
+# 20201222/bie: align log token, try to match also normalized+HD channels
 
 use strict;
 use warnings;
@@ -191,21 +192,21 @@ sub channelmap($$$$) {
 	my %dvr_channels_id_by_name;
 
 	if (defined $$flags_hp{'force_hd_channels'}) {
-		logging("DEBUG", "Channelmap: option 'force_hd_channels' specified: " . $$flags_hp{'force_hd_channels'});
+		logging("DEBUG", "ChannelMap: option 'force_hd_channels' specified: " . $$flags_hp{'force_hd_channels'});
 		$opt_force_hd_channels = $$flags_hp{'force_hd_channels'};
 	};
 
 	if (defined $$flags_hp{'quiet'}) {
-		logging("DEBUG", "Channelmap: option 'quiet' specified: " . $$flags_hp{'quiet'});
+		logging("DEBUG", "ChannelMap: option 'quiet' specified: " . $$flags_hp{'quiet'});
 		$opt_quiet = $$flags_hp{'quiet'};
 	};
 
 	if (defined $$flags_hp{'source_precedence'}) {
 		if ($$flags_hp{'source_precedence'} =~ /^[STC]{3}$/) {
-			logging("DEBUG", "Channelmap: option 'source_precedence' specified: " . $$flags_hp{'source_precedence'});
+			logging("DEBUG", "ChannelMap: option 'source_precedence' specified: " . $$flags_hp{'source_precedence'});
 			$opt_source_precedence = $$flags_hp{'source_precedence'};
 		} else {
-			logging("ERROR", "Channelmap: option 'source_precedence' is not valid -> ignored: " . $$flags_hp{'source_precedence'});
+			logging("ERROR", "ChannelMap: option 'source_precedence' is not valid -> ignored: " . $$flags_hp{'source_precedence'});
 		};
 	};
 
@@ -215,15 +216,15 @@ sub channelmap($$$$) {
 		$source_precedence{substr($opt_source_precedence, $p - 1, 1)} = $p;
 	};
 
-	logging("DEBUG", "Channelmap: process DVR channels (source_precedence=" . $opt_source_precedence . ")");
+	logging("DEBUG", "ChannelMap: process DVR channels (source_precedence=" . $opt_source_precedence . ")");
 
         foreach my $channel_hp (sort { $$a{'name'} cmp $$b{'name'} } @$channels_dvr_ap) {
-		logging("DEBUG", "Channelmap: analyze channel name:'" . $$channel_hp{'name'} . "'");
+		logging("DEBUG", "ChannelMap: analyze channel name:'" . $$channel_hp{'name'} . "'");
 
 		my $name = $$channel_hp{'name'};
 		my $source = $$channel_hp{'source'};
 
-		#logging("DEBUG", "Channelmap: process DVR channel: " . sprintf("%4d / %s [%s]", $$channel_hp{'cid'}, $name, $group));
+		#logging("DEBUG", "ChannelMap: process DVR channel: " . sprintf("%4d / %s [%s]", $$channel_hp{'cid'}, $name, $group));
 
 		$name =~ s/ - CV$//ogi; # remove boutique suffices
 
@@ -231,19 +232,19 @@ sub channelmap($$$$) {
 			# add name/id to hash
 			$dvr_channels_id_by_name{$name}->{'cid'} = $$channel_hp{'cid'};
 			$dvr_channels_id_by_name{$name}->{'source'} = $source;
-			logging("DEBUG", "Channelmap: add DVR channel name: " . sprintf("%s / %s", $$channel_hp{'cid'}, $name));
+			logging("DEBUG", "ChannelMap: add DVR channel name: " . sprintf("%s / %s", $$channel_hp{'cid'}, $name));
 		} else {
 			# already inserted
 			if ($dvr_channels_id_by_name{$name}->{'source'} eq $source) {
-				logging("WARN", "Channelmap: probably duplicate DVR channel name with same source, entry already added with ID: " . sprintf("%4d / %s (%s)", $$channel_hp{'cid'}, $name, $dvr_channels_id_by_name{$name}->{'cid'}))  if ($opt_quiet ne "1");
+				logging("WARN", "ChannelMap: probably duplicate DVR channel name with same source, entry already added with ID: " . sprintf("%4d / %s (%s)", $$channel_hp{'cid'}, $name, $dvr_channels_id_by_name{$name}->{'cid'}))  if ($opt_quiet ne "1");
 			} else {
 				# check precedence
 				if ($source_precedence{$source} < $source_precedence{$dvr_channels_id_by_name{$name}->{'source'}}) {
-					logging("NOTICE", "Channelmap: overwrite duplicate DVR channel name because of source precedence: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $name));
+					logging("NOTICE", "ChannelMap: overwrite duplicate DVR channel name because of source precedence: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $name));
 					$dvr_channels_id_by_name{$name}->{'cid'} = $$channel_hp{'cid'};
 					$dvr_channels_id_by_name{$name}->{'source'} = $source;
 				} else {
-					logging("NOTICE", "Channelmap: do not overwrite duplicate DVR channel name because of source precedence: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $name));
+					logging("NOTICE", "ChannelMap: do not overwrite duplicate DVR channel name because of source precedence: " . sprintf("%4d / %s", $$channel_hp{'cid'}, $name));
 				};
 			};
 		};
@@ -257,10 +258,10 @@ sub channelmap($$$$) {
 				};
 				# TODO more intelligent logic if necessary
 				if (defined $dvr_channel_name_map_altnames{$altname}) {
-					logging("DEBUG", "Channelmap: DVR channel alternative name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $altname, $name, $dvr_channel_name_map_altnames{$altname}));
+					logging("DEBUG", "ChannelMap: DVR channel alternative name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $altname, $name, $dvr_channel_name_map_altnames{$altname}));
 				} else {
 					$dvr_channel_name_map_altnames{$altname} = $name;
-					logging("DEBUG", "Channelmap: add DVR channel alternative name: " . sprintf("%-30s (%s)", $altname, $name));
+					logging("DEBUG", "ChannelMap: add DVR channel alternative name: " . sprintf("%-30s (%s)", $altname, $name));
 				};
 			};
 		};
@@ -273,10 +274,10 @@ sub channelmap($$$$) {
 
 		# TODO more intelligent logic if necessary
 		if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-			logging("DEBUG", "Channelmap: normalized DVR channel name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $name_normalized, $name, $dvr_channel_name_map_normalized{$name_normalized}));
+			logging("DEBUG", "ChannelMap: normalized DVR channel name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $name_normalized, $name, $dvr_channel_name_map_normalized{$name_normalized}));
 		} else {
 			$dvr_channel_name_map_normalized{$name_normalized} = $name;
-			logging("DEBUG", "Channelmap: normalized DVR channel name: " . sprintf("%-30s (%s)", $name_normalized, $name));
+			logging("DEBUG", "ChannelMap: normalized DVR channel name: " . sprintf("%-30s (%s)", $name_normalized, $name));
 		};
 	};
 
@@ -288,15 +289,15 @@ sub channelmap($$$$) {
 
 		# TODO more intelligent logic if necessary
 		if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-			logging("DEBUG", "Channelmap: normalized DVR channel alternative name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $name_normalized, $name, $dvr_channel_name_map_normalized{$name_normalized}));
+			logging("DEBUG", "ChannelMap: normalized DVR channel alternative name: " . sprintf("%-30s (%s) skipped, already filled with: '%s'", $name_normalized, $name, $dvr_channel_name_map_normalized{$name_normalized}));
 		} else {
 			$dvr_channel_name_map_normalized{$name_normalized} = $name;
-			logging("DEBUG", "Channelmap: normalized DVR channel alternative name: " . sprintf("%-30s (%s)", $name_normalized, $name));
+			logging("DEBUG", "ChannelMap: normalized DVR channel alternative name: " . sprintf("%-30s (%s)", $name_normalized, $name));
 		};
 	};
 
 	## Run through service channel names
-	logging("DEBUG", "Channelmap: process service channel names (force_hd_channels=" . $opt_force_hd_channels . ")");
+	logging("DEBUG", "ChannelMap: process service channel names (force_hd_channels=" . $opt_force_hd_channels . ")");
 
         foreach my $id (keys %$service_id_list_hp) {
 		my $name = $$service_id_list_hp{$id}->{'name'};
@@ -307,12 +308,12 @@ sub channelmap($$$$) {
 
 		my $cid = undef;
 
-		logging("TRACE", "Channelmap: process service channel name: **" . $name . "**");
+		logging("TRACE", "ChannelMap: process service channel name: **" . $name . "**");
 
 		# search for name in DVR channels 1:1
 		if (defined $dvr_channels_id_by_name{$name}->{'cid'}) {
 			# 1:1 hit
-			logging("DEBUG", "Channelmap: service channel name hit (1:1): " . $name);
+			logging("DEBUG", "ChannelMap: service channel name hit (1:1): " . $name);
 			$cid = $dvr_channels_id_by_name{$name}->{'cid'};
 			$match_method = 1; # 1:1
 			goto('DVR_ID_FOUND');
@@ -320,7 +321,7 @@ sub channelmap($$$$) {
 
 		# search for name in DVR alternative names
 		if (defined $dvr_channel_name_map_altnames{$name}) {
-			logging("DEBUG", "Channelmap: service channel name hit (DVR altname): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
+			logging("DEBUG", "ChannelMap: service channel name hit (DVR altname): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 			$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_altnames{$name}}->{'cid'};
 			$match_method = 11; # DVR alternative name
 			goto('DVR_ID_FOUND');
@@ -328,17 +329,17 @@ sub channelmap($$$$) {
 
 		# run through service alternative names
 		if (defined $altnames) {
-			logging("TRACE", "Channelmap: process service channel alternative name list: " . $altnames);
+			logging("TRACE", "ChannelMap: process service channel alternative name list: " . $altnames);
 			for my $altname (split '\|', $altnames) {
 				if ($altname eq $name) {
 					# don't check default name again
 					next;
 				};
-				logging("TRACE", "Channelmap: process service channel alternative name: " . $altname);
+				logging("TRACE", "ChannelMap: process service channel alternative name: " . $altname);
 
 				if (defined $dvr_channels_id_by_name{$altname}->{'cid'}) {
 					# 1:1 hit
-					logging("DEBUG", "Channelmap: service channel name hit (1:1 alternative name): " . $altname);
+					logging("DEBUG", "ChannelMap: service channel name hit (1:1 alternative name): " . $altname);
 					$cid = $dvr_channels_id_by_name{$altname}->{'cid'};
 					$match_method = 6; # 1:1 alternative name
 					goto('DVR_ID_FOUND');
@@ -346,7 +347,7 @@ sub channelmap($$$$) {
 
 				# search for name in DVR alternative names
 				if (defined $dvr_channel_name_map_altnames{$altname}) {
-					logging("DEBUG", "Channelmap: service channel name hit (1:1 alternative name with DVR altname): " . $name . " = " . $dvr_channel_name_map_altnames{$altname});
+					logging("DEBUG", "ChannelMap: service channel name hit (1:1 alternative name with DVR altname): " . $name . " = " . $dvr_channel_name_map_altnames{$altname});
 					$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_altnames{$name}}->{'cid'};
 					$match_method = 16; # 1:1 alternative name with DVR alternative name
 					goto('DVR_ID_FOUND');
@@ -356,9 +357,9 @@ sub channelmap($$$$) {
 
 		# search for name in DVR channels (translated)
 		if (defined $name_translated) {
-			logging("TRACE", "Channelmap: process service channel translated name: " . $name_translated);
+			logging("TRACE", "ChannelMap: process service channel translated name: " . $name_translated);
 			if (defined $dvr_channels_id_by_name{$name_translated}->{'cid'}) {
-				logging("DEBUG", "Channelmap: service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
+				logging("DEBUG", "ChannelMap: service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
 				$cid = $dvr_channels_id_by_name{$name_translated}->{'cid'};
 				$match_method = 2; #  translated 1:1
 				goto('DVR_ID_FOUND');
@@ -366,20 +367,29 @@ sub channelmap($$$$) {
 		};
 
 		# search for name in DVR channels (normalized)
-		logging("TRACE", "Channelmap: process service channel normalized name: " . $name_normalized);
+		logging("TRACE", "ChannelMap: process service channel normalized name: " . $name_normalized);
 		if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-			logging("DEBUG", "Channelmap: service channel name hit (normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
+			logging("DEBUG", "ChannelMap: service channel name hit (normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 			$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 			$match_method = 3; # normalized
+			goto('DVR_ID_FOUND');
+		};
+
+		# search for name in DVR channels (normalized) + HD
+		logging("TRACE", "ChannelMap: process service channel normalized+HD name: " . $name_normalized . "hd");
+		if (defined $dvr_channel_name_map_normalized{$name_normalized . "hd"}) {
+			logging("DEBUG", "ChannelMap: service channel name hit (normalized+HD): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized . "hd"});
+			$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized . "hd"}}->{'cid'};
+			$match_method = 13; # normalized+HD
 			goto('DVR_ID_FOUND');
 		};
 
 		# search for name in DVR channels (translated & normalized)
 		if (defined $name_translated) {
 			my $name_normalized = normalize($name_translated);
-			logging("TRACE", "Channelmap: process service channel translated/normalized name: " . $name_normalized);
+			logging("TRACE", "ChannelMap: process service channel translated/normalized name: " . $name_normalized);
 			if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-				logging("DEBUG", "Channelmap: service channel name hit (translated & normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
+				logging("DEBUG", "ChannelMap: service channel name hit (translated & normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 				$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 				$match_method = 4; # translated+normalized
 				goto('DVR_ID_FOUND');
@@ -388,18 +398,18 @@ sub channelmap($$$$) {
 
 		# run through normalized alternative names
 		if (defined $altnames) {
-			logging("TRACE", "Channelmap: process service channel normalized alternative name list: " . $altnames);
+			logging("TRACE", "ChannelMap: process service channel normalized alternative name list: " . $altnames);
 			for my $altname (split '\|', $altnames) {
 				if ($altname eq $name) {
 					# don't check default name again
 					next;
 				};
 				my $name_normalized = normalize($altname);
-				logging("TRACE", "Channelmap: process service channel normalized alternative name: " . $name_normalized);
+				logging("TRACE", "ChannelMap: process service channel normalized alternative name: " . $name_normalized);
 
 				if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
 					# normalized hit
-					logging("DEBUG", "Channelmap: service channel name hit (normalized alternative name): " . $name_normalized);
+					logging("DEBUG", "ChannelMap: service channel name hit (normalized alternative name): " . $name_normalized);
 					$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 					$match_method = 7; # normalized alternative name
 					goto('DVR_ID_FOUND');
@@ -408,11 +418,11 @@ sub channelmap($$$$) {
 		};
 
 		# Unmatched channel
-		logging("ERROR", "Channelmap: can't find service channel name: " . $name . " (normalized: " . $name_normalized . ")") if ($opt_quiet ne "1");
+		logging("ERROR", "ChannelMap: can't find service channel name: " . $name . " (normalized: " . $name_normalized . ")") if ($opt_quiet ne "1");
 		next;
 
 DVR_ID_FOUND:
-		logging("DEBUG", "Channelmap: found CID for service channel name: " . $name . " = " . $cid . " (match method: " . $match_method . ")");
+		logging("DEBUG", "ChannelMap: found CID for service channel name: " . $name . " = " . $cid . " (match method: " . $match_method . ")");
 
 		# set cid;
 		$$service_id_list_hp{$id}->{'cid'} = $cid;
@@ -429,12 +439,12 @@ DVR_ID_FOUND:
 			$name_translated = $channel_translations{$$service_id_list_hp{$id}->{'name'}} . " HD";
 		};
 
-		logging("DEBUG", "Channelmap: process forced-to-HD service channel name: " . $name . " (" . $name_normalized . ")");
+		logging("DEBUG", "ChannelMap: process forced-to-HD service channel name: " . $name . " (" . $name_normalized . ")");
 
 		# search for name in DVR channels 1:1
 		if (defined $dvr_channels_id_by_name{$name}->{'cid'}) {
 			# 1:1 hit
-			logging("DEBUG", "Channelmap: forced-to-HD service channel name hit (1:1): " . $name);
+			logging("DEBUG", "ChannelMap: forced-to-HD service channel name hit (1:1): " . $name);
 			$cid = $dvr_channels_id_by_name{$name}->{'cid'};
 			goto('DVR_ID_FOUND_HD');
 		};
@@ -442,7 +452,7 @@ DVR_ID_FOUND:
 		# search for name in DVR channels (translated)
 		if (defined $name_translated) {
 			if (defined $dvr_channels_id_by_name{$name_translated}->{'cid'}) {
-				logging("DEBUG", "Channelmap: forced-to-HD service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
+				logging("DEBUG", "ChannelMap: forced-to-HD service channel name hit (translated 1:1): " . $name . " = " . $name_translated);
 				$cid = $dvr_channels_id_by_name{$name_translated}->{'cid'};
 				goto('DVR_ID_FOUND_HD');
 			};
@@ -450,7 +460,7 @@ DVR_ID_FOUND:
 
 		# search for name in DVR channels (normalized)
 		if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-			logging("DEBUG", "Channelmap: forced-to-HD service channel name hit (normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
+			logging("DEBUG", "ChannelMap: forced-to-HD service channel name hit (normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 			$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 			goto('DVR_ID_FOUND_HD');
 		};
@@ -459,7 +469,7 @@ DVR_ID_FOUND:
 		if (defined $name_translated) {
 			my $name_normalized = normalize($name_translated);
 			if (defined $dvr_channel_name_map_normalized{$name_normalized}) {
-				logging("DEBUG", "Channelmap: forced-to-HD service channel name hit (translated & normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
+				logging("DEBUG", "ChannelMap: forced-to-HD service channel name hit (translated & normalized): " . $name . " = " . $dvr_channel_name_map_normalized{$name_normalized});
 				$cid = $dvr_channels_id_by_name{$dvr_channel_name_map_normalized{$name_normalized}}->{'cid'};
 				goto('DVR_ID_FOUND_HD');
 			};
@@ -469,7 +479,7 @@ DVR_ID_FOUND:
 		next;
 
 DVR_ID_FOUND_HD:
-		logging("DEBUG", "Channelmap: found DVR_ID for forced-to-HD service channel name: " . $name . " = " . $cid);
+		logging("DEBUG", "ChannelMap: found DVR_ID for forced-to-HD service channel name: " . $name . " = " . $cid);
 
 		# set cid;
 		$$service_id_list_hp{$id}->{'cid'} = $cid;
