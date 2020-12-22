@@ -9,37 +9,37 @@
 # License: GPLv2
 #
 # Authors:
-#  Peter Bieringer (pb)
+#  Peter Bieringer (bie)
 #  <macfly> / Friedhelm Büscher
 #
 # Changelog:
-# 20130116/pb: initial release
-# 20130128/pb: replace inflexible channels.pl handling by automatic channel mapping
-# 20130203/pb: optional logging to syslog instead of stderr (-L), optional summary to stdout in case of action or log entry >= warn
-# 20130207/pb: skip running/expired HTML entries, store XML entry also if no HTML entry was found (looks like TVinfo HTML can be buggy), e.g.
+# 20130116/bie: initial release
+# 20130128/bie: replace inflexible channels.pl handling by automatic channel mapping
+# 20130203/bie: optional logging to syslog instead of stderr (-L), optional summary to stdout in case of action or log entry >= warn
+# 20130207/bie: skip running/expired HTML entries, store XML entry also if no HTML entry was found (looks like TVinfo HTML can be buggy), e.g.
 #                 XML:  start=2013-02-11 05:30:00 +0100  end=2013-02-11 06:00:00 +0100  channel=3sat title='Der Hochzeits-Profi
 #                 HTML: day=10 month=02 start=05:30 end=06:00 channel=3sat title='Der Hochzeits-Profi' (BUGGY)
-# 20130208/pb: use networktimeout from config-ng.pl
-# 20130213/pb: TEMP fix: skip fetch of HTML Merkzettel, don't correlate
-# 20130228/pb: convert recode already existing timers to match umlauts
-# 20130707/pb: in case of multi-line titles use only first line
-# 20130816/pb: don't proceed if Merkzettel is completly emtpy to avoid removing existing all TVinfo based VDR timers (seen on broken TVinfo interface, returning unexpectly empty list)
-# 20130824/pb: remove EOL and unsupported HTML Merkzettel support
-# 20130825/pb: add support for CA whitelist and fix broken CA channel config switch
-# 20140102/pb: replace invalid loglevel FATAL with ALERT
-# 20140115/pb: fix changed login URI on www.tvinfo.de
-# 20140709/pb: fix broken handling in case of multiple users select same timer in folder mode
-# 20140802/pb: use new Station XML URL instead of HTML "Meine Sender"
-# 20140804/pb: add support for MD5 hashed password
-# 201411xx/pb: complete reorg, support now also DVR tvheadend via HTSP
-# 20141129/pb: hibernate support of dedicated SYSTEM (currently not needed)
-# 20141229/pb: improve error handling
-# 20151101/pb: display also seconds of timestamps in MATCH
-# 20170902/pb: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
-# 20181010/pb: be not quiet in debug/trace mode when calling channelmap
-# 20201023/pb: add hint for hashed TVinfo password
-# 20201205/pb: add optional trace level for debug class
-# 20201222/pb: check for existing DVR channel before try to match timer
+# 20130208/bie: use networktimeout from config-ng.pl
+# 20130213/bie: TEMP fix: skip fetch of HTML Merkzettel, don't correlate
+# 20130228/bie: convert recode already existing timers to match umlauts
+# 20130707/bie: in case of multi-line titles use only first line
+# 20130816/bie: don't proceed if Merkzettel is completly emtpy to avoid removing existing all TVinfo based VDR timers (seen on broken TVinfo interface, returning unexpectly empty list)
+# 20130824/bie: remove EOL and unsupported HTML Merkzettel support
+# 20130825/bie: add support for CA whitelist and fix broken CA channel config switch
+# 20140102/bie: replace invalid loglevel FATAL with ALERT
+# 20140115/bie: fix changed login URI on www.tvinfo.de
+# 20140709/bie: fix broken handling in case of multiple users select same timer in folder mode
+# 20140802/bie: use new Station XML URL instead of HTML "Meine Sender"
+# 20140804/bie: add support for MD5 hashed password
+# 201411xx/bie: complete reorg, support now also DVR tvheadend via HTSP
+# 20141129/bie: hibernate support of dedicated SYSTEM (currently not needed)
+# 20141229/bie: improve error handling
+# 20151101/bie: display also seconds of timestamps in MATCH
+# 20170902/bie: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
+# 20181010/bie: be not quiet in debug/trace mode when calling channelmap
+# 20201023/bie: add hint for hashed TVinfo password
+# 20201205/bie: add optional trace level for debug class
+# 20201222/bie: check for existing DVR channel before try to match timer, align log token
 
 use strict; 
 use warnings; 
@@ -140,7 +140,7 @@ our %debug_class = (
 	"CHANNELS"    => 0,
 	"TVINFO"      => 0,
 	"TVHEADEND"   => 0,
-	"Channelmap"  => 0,
+	"ChannelMap"  => 0,
 	"MeineSender" => 0,
 	"AlleSender"  => 0,
 );
@@ -305,8 +305,8 @@ DVR related
          --dc <USER>:<PASS>        DVR Credentials (user:password) (not required for SVDRP)
 
 Channel Mapping
-         -c|--scm                  Show Channel Map results (and stop)
-         --scs                     Show Channelmap Suggestions
+         -c|--scm                  Show ChannelMap results (and stop)
+         --scs                     Show ChannelMap Suggestions
          --icc                     Include Ca Channels (default: no use)
          --wcg <group>             Whitelist-Ca-Group (can be used more than one time)
                                     '*' => all CA groups
@@ -430,7 +430,7 @@ my $options_result = GetOptions (
 
 	#"system=s"	=> \$opt_system,
 
-	# Channelmap
+	# ChannelMap
 	"c|scm"		=> \$opt_c,
 	"u"		=> \$opt_u,
 	"scs"		=> \$opt_show_channelmap_suggestions,
