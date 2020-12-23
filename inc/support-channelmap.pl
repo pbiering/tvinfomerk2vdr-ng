@@ -24,6 +24,7 @@
 # 20181010/bie: fix/expand altnames handling for DVR
 # 20190704/bie: ignore '+' found on "Anixe+"
 # 20201222/bie: align log token, try to match also normalized+HD channels
+# 20201223/bie: sort service channels before processing
 
 use strict;
 use warnings;
@@ -299,7 +300,7 @@ sub channelmap($$$$) {
 	## Run through service channel names
 	logging("DEBUG", "ChannelMap: process service channel names (force_hd_channels=" . $opt_force_hd_channels . ")");
 
-        foreach my $id (keys %$service_id_list_hp) {
+        foreach my $id (sort { $$service_id_list_hp{$a}->{'name'} cmp $$service_id_list_hp{$b}->{'name'} } keys %$service_id_list_hp) {
 		my $name = $$service_id_list_hp{$id}->{'name'};
 		my $altnames = $$service_id_list_hp{$id}->{'altnames'};
 		my $name_normalized = normalize($name);
