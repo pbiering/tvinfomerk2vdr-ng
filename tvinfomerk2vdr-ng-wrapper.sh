@@ -27,6 +27,9 @@
 # 20171203/pb: do not stop in case defined var directory can't be written for status file, disable write to status file instead and display a warning
 # 20200216/pb: implement system check and add it on several steps
 # 20201203/pb: detect and support mailx from Fedora Linux
+# 20201207/pb: explicitly use mailx on Fedora Linux
+# 20201216/pb: remove iconv in front of mailx
+# 20201229/pb: add support for run-disable file
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -41,6 +44,7 @@ else
 	var_base="/var/opt/tvinfomerk2vdr-ng"
 	system="other"
 	perl=""
+	run_disable="/run/tvinfomerk2vdr-ng.disable"
 fi
 
 config="$config_base/tvinfomerk2vdr-ng-users.conf"
@@ -133,6 +137,12 @@ END
 
 ## check system still in normal state
 check_system() {
+	# check for run-disable file
+	if [ -n "$run_disable" -a -e "$run_disable" ]; then
+		logging "NOTICE" "run-disable file found, skip execution: $run_disable"
+		return 1
+	fi
+
 	## check for runlevel 2-5
 	runlevel=$(/sbin/runlevel | awk '{ print $2 }')
 	if [ -n "$runlevel" ]; then
