@@ -1,0 +1,50 @@
+tvinfomerk2vdr-ng/ReelBoxNG
+===========================
+
+Prerequisites
+-------------
+- execute tasks documented in INSTALL
+
+- install missing Perl modules
+    # yum install perl-XML-Simple perl-Date-Calc perl-JSON
+
+
+Installation
+------------
+
+*One-time installation* 
+- unpack (this automatically creates the subdirectory)
+    # unzip -d /opt /tmp/tvinfomerk2vdr-ng.zip
+- rename the master directory
+    # mv /opt/tvinfomerk2vdr-ng-master /opt/tvinfomerk2vdr-ng
+
+*'continuous' update installation*
+- clone git repository
+    # cd /opt
+    # git clone https://github.com/pbiering/tvinfomerk2vdr-ng.git
+
+Create Configuration and temporary storage directory
+----------------------------------------------------
+    # mkdir /etc/opt/tvinfomerk2vdr-ng
+    # mkdir /var/opt/tvinfomerk2vdr-ng
+
+Configuration
+-------------
+- change to destination directory
+    # cd /opt/tvinfomerk2vdr-ng
+    # cd /opt/tvinfomerk2vdr-ng-devel (in case of devel branch)
+
+see now CONFIGURATION
+
+
+Creation of Cron-Job
+--------------------
+on reboot & every 30 minutes
+
+# cat <<END >/etc/cron.d/tvinfomerk2vdr-ng
+@reboot root /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh
+*/30 * * * * root /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh
+END
+
+See also then syslog output after minimum 30 min:
+# tail -f /var/log/messages
