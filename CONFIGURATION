@@ -8,7 +8,7 @@ Prerequisites:
 
 Channel Alignment:
 ------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scs
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scs
 
 If channels (aka stations or "Meine Sender") are proper configured, following result should be shown as last line:
 
@@ -18,11 +18,12 @@ If channels (aka stations or "Meine Sender") are proper configured, following re
 Notes:
 - in case of autodetection is not working, try to use --dvr vdr|tvheadend
 - in case of DVR is not locally installed, use -d <DVR host>
+- newer VDR installations require: -p 6419
 
 
 Channel Map Result:
 -------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scm
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scm
 
 (this shows the channel mapping between SERVICE and DVR)
 
@@ -30,7 +31,7 @@ $ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> --scm
 
 Dry-run of syncing timers (aka schedules or "Merkliste"):
 ---------------------------------------------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -N
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> -N
    optional use -F <folder> for specifying a sub-folder for the recordings
 
 This should write DVR actions to a file, e.g.
@@ -44,7 +45,7 @@ Check this command file
 
 Real run of syncing timers (aka schedules or "Merkliste"):
 ---------------------------------------------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password>
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password>
    optional use -F <folder> for specifying a sub-folder for the recordings
 
 On last lines on any executed action following should be shown:
@@ -61,22 +62,22 @@ If e.g. following is shown, check messages on NOTICE|WARN level for reason:
 Store configuration into default properties file:
 -----------------------------------------
 Create backup
-$ cp tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
+# cp tvinfomerk2vdr-ng.properties tvinfomerk2vdr-ng.properties.$(date '+%Y%m%d-%H%M%S')
 
 Write (updated) config
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> [-F <folder>] --wp
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -P <service-password> [-F <folder>] --wp
 
 
 Run again using default properties file:
 ----------------------------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username>
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username>
 
 Everything should run fine, no DVR actions should occur (because of the first real-run)
 
 
 Run again using default properties file and syslog output:
 ----------------------------------------------------------
-$ perl ./tvinfomerk2vdr-ng.pl -U <service-username> -L
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -U <service-username> -L
 
 Output messages should appear now in syslog
 - reelbox: /var/log/messages
@@ -86,23 +87,22 @@ Output messages should appear now in syslog
 For onging execution by cron the wrapper needs to be configure now
 ------------------------------------------------------------------
 Move properties file to created directory during INSTALL
- $ mv tvinfomerk2vdr-ng.properties CONFIGSTORAGEPATH
+# mv tvinfomerk2vdr-ng.properties CONFIGSTORAGEPATH
 
 Copy example file
- $ cp tvinfomerk2vdr-ng-users.conf.example CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
+# cp tvinfomerk2vdr-ng-users.conf.example CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
  
 Add users (don't care about ERROR message regarding SERVICE username not defined
- $  perl ./tvinfomerk2vdr-ng.pl --pp --rp CONFIGSTORAGEPATH/tvinfomerk2vdr-ng.properties | egrep "^service\.tvinfo\.user\..+\.password" | awk -F. '{ print $4 "::::" }' >>CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl --pp --rp CONFIGSTORAGEPATH/tvinfomerk2vdr-ng.properties | egrep "^service\.tvinfo\.user\..+\.password" | awk -F. '{ print $4 "::::" }' >>CONFIGSTORAGEPATH/tvinfomerk2vdr-ng-users.conf
 age/.config/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-users.conf
 
 List users
- $ ./tvinfomerk2vdr-ng-wrapper.sh -l
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng.pl -l
 INFO  : list users
 INFO  : List entry: USER:
 
 Run with user (dry-run, but everthing should look fine)
- $ ./tvinfomerk2vdr-ng-wrapper.sh -u USER -N
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh -u USER -N
 
 Run without specifying a user (more than one user can be configured)
- $ ./tvinfomerk2vdr-ng-wrapper.sh -N -n
-
+# /opt/tvinfomerk2vdr-ng/tvinfomerk2vdr-ng-wrapper.sh -N -n
