@@ -6,7 +6,7 @@ Prerequisites
 - execute tasks documented in INSTALL
 
 - install missing Perl modules
-    # yum install perl-XML-Simple perl-Date-Calc perl-JSON
+    # yum install perl-XML-Simple perl-Date-Calc perl-JSON perl-LWP-Protocol-https
 
 
 Installation
