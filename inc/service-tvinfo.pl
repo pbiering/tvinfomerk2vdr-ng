@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014-2020 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014-2022 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -20,6 +20,8 @@
 # 20190129/bie: use only curl for web requests for now
 # 20190713/bie: fix UTF-8 conversion
 # 20200519/bie: ignore older duplicated timers
+# 20220428/bie: enable retry again because pool members behind loadbalancer on TVinfo side are not equally configured (but luckily round-robin is configured on loadbalancer)
+# 20220428/bie: add for troubleshooting toggle for switch between 'LWP' and 'curl', switch back to use of 'LWP' (supporting proxy)
 
 use strict;
 use warnings;
@@ -27,6 +29,7 @@ use utf8;
 
 use Data::Dumper;
 use LWP;
+use LWP::Protocol::https;
 use HTTP::Request::Common;
 use HTTP::Date;
 use XML::Simple;
@@ -66,7 +69,8 @@ my %tvinfo_MeineSender_id_list;
 my %tvinfo_channel_name_by_id;
 my %tvinfo_channel_id_by_name;
 
-
+## local internal toggles
+my $use_curl = 0;
 
 ################################################################################
 ################################################################################
@@ -171,31 +175,40 @@ sub service_tvinfo_get_channels($$;$) {
 
 		logging("DEBUG", "TVINFO: start request: " . $request);
 
-		my $retry_max = 1;
+		my $retry_max = 3;
 		my $retry = 0;
 		my $response;
-		my $interval = 20;
+		my $interval = 10;
 
-#		while ($retry < $retry_max) {
-#			$response = $tvinfo_client->request(GET "$request");
-#			if (! $response->is_success) {
-#				$retry++;
-#				logging("NOTICE", "TVINFO: can't fetch stations (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
-#				sleep($interval);
-#			};
-#		};
-#
-#		if (! $response->is_success) {
-#			logging("WARN", "TVINFO: can't fetch stations (fallback to 'curl' now): " . $response->status_line);
-			logging("DEBUG", "TVINFO: fetch stations via 'curl': " . $request);
-			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
-			if ($xml_raw !~ /^<\?xml /o) {
-				logging("ERROR", "TVINFO: can't fetch stations: " . substr($xml_raw, 0, 320) . "...");
-				return(1);
+		while ($retry < $retry_max) {
+			unless (defined $use_curl && $use_curl eq "1") {
+				logging("DEBUG", "TVINFO: fetch XML stations via 'LWP': " . $request);
+				$response = $tvinfo_client->request(GET "$request");
+				if ($response->is_success) {
+					$xml_raw = $response->content;
+					last;
+				};
+				logging("NOTICE", "TVINFO: can't fetch XML stations via 'LWP' (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+			} else {
+				logging("DEBUG", "TVINFO: fetch stations via 'curl': " . $request);
+				$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
+				if ($xml_raw =~ /^<\?xml /o) {
+					last;
+				};
+				logging("NOTICE", "TVINFO: can't fetch XML stations via 'curl' (retry in $interval seconds $retry/$retry_max): " . substr($xml_raw, 0, 320) . "...");
 			};
-#		} else {
-#			$xml_raw = $response->content;
-#		};
+			$retry++;
+			sleep($interval);
+		};
+
+		$xml_raw = "(empty)" if (! defined $xml_raw);
+
+		if ($xml_raw !~ /^<\?xml /o) {
+			logging("ERROR", "TVINFO: can't fetch XML stations: " . substr($xml_raw, 0, 320) . "...");
+			return(1);
+		};
+
+		logging("INFO", "TVINFO: successful fetch XML stations after retries: " . $retry);
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
@@ -409,31 +422,41 @@ sub service_tvinfo_get_timers($) {
 
 		logging("DEBUG", "TVINFO: start request: " . $request);
 
-		my $retry_max = 1;
+		my $retry_max = 3;
 		my $retry = 0;
 		my $response;
-		my $interval = 20;
+		my $interval = 10;
 
-#		while ($retry < $retry_max) {
-#			$response = $tvinfo_client->request(GET "$request");
-#			if (! $response->is_success) {
-#				$retry++;
-#				logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
-#				sleep($interval);
-#			};
-#		};
-#
-#		if (! $response->is_success) {
-#			logging("WARN", "TVINFO: can't fetch XML timers from tvinfo (fallback to 'curl' now): " . $response->status_line);
-			logging("DEBUG", "TVINFO: fetch XML timers via 'curl' now: " . $request);
-			$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
-			if ($xml_raw !~ /^<\?xml /o) {
-				logging("ERROR", "TVINFO: can't fetch XML timers from tvinfo: " . substr($xml_raw, 0, 320) . "...");
-				return(1);
+		while ($retry < $retry_max) {
+			unless (defined $use_curl && $use_curl eq "1") {
+				logging("DEBUG", "TVINFO: fetch XML timers via 'LWP' now: " . $request);
+				$response = $tvinfo_client->request(GET "$request");
+				if ($response->is_success) {
+					$xml_raw = $response->content;
+					last;
+				};
+				logging("NOTICE", "TVINFO: can't fetch XML timers via 'LWP' (retry in $interval seconds $retry/$retry_max): " . $response->status_line);
+			} else {
+				logging("DEBUG", "TVINFO: fetch XML timers via 'curl' now: " . $request);
+				$xml_raw = `curl -A '$user_agent' -k '$request' 2>/dev/null`;
+				if ($xml_raw =~ /^<\?xml /o) {
+					last;
+				};
+				logging("NOTICE", "TVINFO: can't fetch XML timers via 'curl' (retry in $interval seconds $retry/$retry_max): " . substr($xml_raw, 0, 320) . "...");
 			};
-#		} else {
-#			$xml_raw = $response->content;
-#		};
+
+			$retry++;
+			sleep($interval);
+		};
+
+		$xml_raw = "(empty)" if (! defined $xml_raw);
+
+		if ($xml_raw !~ /^<\?xml /o) {
+			logging("ERROR", "TVINFO: can't fetch XML timers: " . substr($xml_raw, 0, 320) . "...");
+			return(1);
+		};
+
+		logging("INFO", "TVINFO: successful fetch XML timers after retries: " . $retry);
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
