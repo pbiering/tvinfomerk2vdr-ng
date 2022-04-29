@@ -181,6 +181,7 @@ sub service_tvinfo_get_channels($$;$) {
 		my $interval = 10;
 
 		while ($retry < $retry_max) {
+			$retry++;
 			unless (defined $use_curl && $use_curl eq "1") {
 				logging("DEBUG", "TVINFO: fetch XML stations via 'LWP': " . $request);
 				$response = $tvinfo_client->request(GET "$request");
@@ -197,7 +198,6 @@ sub service_tvinfo_get_channels($$;$) {
 				};
 				logging("NOTICE", "TVINFO: can't fetch XML stations via 'curl' (retry in $interval seconds $retry/$retry_max): " . substr($xml_raw, 0, 320) . "...");
 			};
-			$retry++;
 			sleep($interval);
 		};
 
@@ -428,6 +428,7 @@ sub service_tvinfo_get_timers($) {
 		my $interval = 10;
 
 		while ($retry < $retry_max) {
+			$retry++;
 			unless (defined $use_curl && $use_curl eq "1") {
 				logging("DEBUG", "TVINFO: fetch XML timers via 'LWP' now: " . $request);
 				$response = $tvinfo_client->request(GET "$request");
@@ -444,8 +445,6 @@ sub service_tvinfo_get_timers($) {
 				};
 				logging("NOTICE", "TVINFO: can't fetch XML timers via 'curl' (retry in $interval seconds $retry/$retry_max): " . substr($xml_raw, 0, 320) . "...");
 			};
-
-			$retry++;
 			sleep($interval);
 		};
 
