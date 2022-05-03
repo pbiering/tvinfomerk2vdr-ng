@@ -208,7 +208,7 @@ sub service_tvinfo_get_channels($$;$) {
 			return(1);
 		};
 
-		logging("INFO", "TVINFO: successful fetch XML stations after retries: " . $retry);
+		logging("INFO", "TVINFO: successful fetch XML stations after try: " . $retry);
 
 		if (defined $WriteStationsXML) {
 			logging("NOTICE", "TVINFO: write XML contents of stations to file: " . $WriteStationsXML);
@@ -455,7 +455,7 @@ sub service_tvinfo_get_timers($) {
 			return(1);
 		};
 
-		logging("INFO", "TVINFO: successful fetch XML timers after retries: " . $retry);
+		logging("INFO", "TVINFO: successful fetch XML timers after try: " . $retry);
 
 		if (defined $WriteScheduleXML) {
 			logging("NOTICE", "TVINFO: write XML contents of timers to file: " . $WriteScheduleXML);
