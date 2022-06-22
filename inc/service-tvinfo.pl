@@ -568,7 +568,7 @@ sub service_tvinfo_get_timers($) {
 		$stop_ut  = int($stop_ut  / 60) * 60;
 
 		if ($$xml_entry_p{'eventtype'} ne "rec") {
-			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
+			logging("DEBUG", "TVINFO: SKIP (eventtype!=rec): start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
 			next;
 		};
 
@@ -583,7 +583,7 @@ sub service_tvinfo_get_timers($) {
 		};
 
 		if (!defined $tvinfo_channel_id_by_name{$xml_channel}) {
-			logging("WARN", "TVINFO: SKIP (channel_id not defined): start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
+			logging("WARN", "TVINFO: SKIP (channel_id not defined): start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
 			next;
 		};
 
@@ -593,7 +593,7 @@ sub service_tvinfo_get_timers($) {
 			if (($timer_p->{'start_ut'} eq $start_ut)
 			    && ($timer_p->{'stop_ut'} eq $stop_ut)
 			    && ($timer_p->{'cid'} eq $tvinfo_channel_id_by_name{$xml_channel})) {
-				logging("WARN", "TVINFO: SKIP (duplicate found to tid=$timer_p->{'tid'}): tid=$$xml_entry_p{'uid'} start=$xml_starttime end=$xml_endtime channel=$xml_channel title='$xml_title'");
+				logging("WARN", "TVINFO: SKIP (duplicate found to tid=$timer_p->{'tid'}): tid=$$xml_entry_p{'uid'} start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
 				$duplicate = 1;
 			};
 		};
