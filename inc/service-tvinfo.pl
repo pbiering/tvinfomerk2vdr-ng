@@ -22,6 +22,7 @@
 # 20200519/bie: ignore older duplicated timers
 # 20220428/bie: enable retry again because pool members behind loadbalancer on TVinfo side are not equally configured (but luckily round-robin is configured on loadbalancer)
 # 20220428/bie: add for troubleshooting toggle for switch between 'LWP' and 'curl', switch back to use of 'LWP' (supporting proxy)
+# 20220622/bie: skip entry in schedule in case of entry has broken start/end time
 
 use strict;
 use warnings;
@@ -551,6 +552,16 @@ sub service_tvinfo_get_timers($) {
 
 		my $start_ut = str2time($xml_starttime);
 		my $stop_ut  = str2time($xml_endtime  );
+
+		if (! defined $start_ut) {
+			logging("WARN", "TVINFO: SKIP ('start' broken): start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
+			next;
+		};
+
+		if (! defined $stop_ut) {
+			logging("WARN", "TVINFO: SKIP ('end' broken): start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
+			next;
+		};
 
 		# round-down minute based (sometimes, XML contains seconds <> 00)
 		$start_ut = int($start_ut / 60) * 60;
