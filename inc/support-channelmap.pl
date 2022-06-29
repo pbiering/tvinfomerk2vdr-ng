@@ -2,7 +2,7 @@
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
-# (P) & (C) 2013-2020 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2022 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -25,6 +25,7 @@
 # 20190704/bie: ignore '+' found on "Anixe+"
 # 20201222/bie: align log token, try to match also normalized+HD channels
 # 20201223/bie: sort service channels before processing
+# 20220629/bie: remove " Television" ("RTL" issue)
 
 use strict;
 use warnings;
@@ -98,6 +99,7 @@ sub normalize($) {
 	$input =~ s/Fern$//g; # remove " Fern"
 	$input =~ s/ II$/2/g; # replace " II" with "2"
 	$input =~ s/ SD$//g; # remove " SD"
+	$input =~ s/ Television$//g; # remove " Television"
 
 	$input =~ s/ Germany //go;
 	$input =~ s/ Germany$//go;
