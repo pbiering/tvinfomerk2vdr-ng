@@ -2,7 +2,7 @@
 #
 # Wrapper script for tvinfomerk2vdr-ng.pl to handle multiple TVinfo user accounts
 #
-# (P) & (C) 2013-2020 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2022 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -31,6 +31,7 @@
 # 20201216/pb: add iconv in front of mailx
 # 20201229/pb: add support for run-disable file
 # 20220429/pb: fix iconv in front of mailx
+# 20220705/pb: increase boot delay from 2 to 3 min
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -68,7 +69,7 @@ files_test="$config $files_executables"
 dirs_test="$var_base"
 
 status_delta_minimum=900	# 15 min
-boot_delay_minimum=120		# 2 min
+boot_delay_minimum=180		# 3 min
 
 if [ -n "$var_base" ]; then
 	file_status="$var_base/tvinfomerk2vdr-ng-wrapper.status"
