@@ -34,6 +34,9 @@
 # 20220429/pb: fix iconv in front of mailx
 # 20220705/pb: increase boot delay from 2 to 3 min
 # 20220720/pb: add support for optional service in config file
+# 20201229/pb: add support for run-disable file
+# 20220429/pb: fix iconv in front of mailx
+# 20220705/pb: increase boot delay from 2 to 3 min
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -415,11 +418,11 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email servi
 			result_token="WARN"
 		fi
 		if [ -n "$output" -a "$opt_debug" != "1" ]; then
-			if [ -x /usr/bin/mailx.mailx ]; then
-				# mailx (e.g. Fedora)
-				echo "$output" | /usr/bin/mailx.mailx -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
-			else
+			if mail -V | grep -q Mailutils; then
 				echo "$output" | mail -n -a "Content-Type: text/plain; charset=utf-8" $option_header_prio_opt "$option_header_prio_val" -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
+			else
+				# mailx (e.g. Fedora)
+				echo "$output" | iconv -t UTF-8 -f ISO8859-1 | mail -n -s "tvinfomerk2vdr-ng `date '+%Y%m%d-%H%M'` $username $result_token" $email
 			fi
 		else
 			if [ -n "$output" ]; then
@@ -453,4 +456,4 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email servi
 		[ "$opt_debug" = "1" ] && logging "DEBUG" "Sleep some seconds: $sleeptime"
 		sleep $sleeptime
 	fi
-done || exit 1
+done
