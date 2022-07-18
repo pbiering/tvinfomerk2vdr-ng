@@ -37,6 +37,7 @@
 # 20151101/bie: display also seconds of timestamps in MATCH
 # 20170902/bie: tvinfo: remember login status on fetching channels from service to decide later between login problems and later empty timer list
 # 20181010/bie: be not quiet in debug/trace mode when calling channelmap
+# 20200209/bie: add support for tvdirekt
 # 20201023/bie: add hint for hashed TVinfo password
 # 20201205/bie: add optional trace level for debug class
 # 20201222/bie: check for existing DVR channel before try to match timer, align log token
@@ -140,6 +141,7 @@ our %debug_class = (
 	"HTSP"        => 0,
 	"CHANNELS"    => 0,
 	"TVINFO"      => 0,
+	"TVDIREKT"    => 0,
 	"TVHEADEND"   => 0,
 	"ChannelMap"  => 0,
 	"MeineSender" => 0,
@@ -172,7 +174,7 @@ our $whitelist_ca_groups;	# mapped
 ###############################################################################
 
 ## define defaults
-my @service_modules = ("tvinfo");
+my @service_modules = ("tvinfo", "tvdirekt");
 my @dvr_modules     = ("vdr", "tvheadend");
 #my @system_modules  = ("reelbox", "openelec");
 
@@ -215,6 +217,8 @@ $traceclass{'HTSP'} = 0;
 
 $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
 	#$traceclass{'TVINFO'} |= 0x0040; # XML Merkzettel (parsed)
+$traceclass{'TVDIREKT'} = 1; # 0x01: HTML login
+$traceclass{'TVDIREKT'} |= 0xf0; # 0xf0: schedules
 
 ## properties and their default
 my %properties;
@@ -1096,6 +1100,8 @@ my @channels_dvr_filtered;
 my @channels_service;
 my @channels_service_filtered;
 
+my %service_cid_to_dvr_cid_map;
+
 
 ######################################################
 ## Define some shortcut functions
@@ -1162,6 +1168,10 @@ print_dvr_channels(\@channels_dvr_filtered);
 #######################################
 $rc = $module_functions{'service'}->{$setup{'service'}}->{'get_channels'}(\@channels_service);
 
+if ($rc == -1) {
+	logging("NOTICE", "SERVICE: is not supporting channels");
+} else { # SERVICE supporting channels
+
 if ($rc != 0) {
 	logging("CRIT", "SERVICE: get_channels returned an error - STOP");
 	$rc_exit = 4;
@@ -1195,8 +1205,6 @@ print_service_channels(\@channels_service_filtered);
 # display warnings if SERVICE has more channels
 #  than DVR
 ###################################################
-
-my %service_cid_to_dvr_cid_map;
 
 my %flags_channelmap;
 
@@ -1295,6 +1303,8 @@ if ((defined $opt_u) && (1 == 0)) {
 if (defined $opt_c) {
 	goto("END");
 };
+
+}; # end of SERVICE supporting channels
 
 
 #############################################################
