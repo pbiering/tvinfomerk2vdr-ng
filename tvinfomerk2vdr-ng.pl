@@ -322,7 +322,7 @@ Debug options:
          -T	                   Trace Mode
          -C <class>[=<trace>][,..] Debug/Trace Classes: $debug_class_string ('*' for all) with optional trace level
          -X	                   XML Debug Mode
-         -N	                   No real DVR change action (do not delete/add timers but write an action fike)
+         -N	                   No real DVR change action (do not delete/add timers but write an action file)
          -W                        Write (all)  raw responses to files
          --wstf                    Write (only) Service raw responses To File(s)
          --wdtf                    Write (only) Dvr raw responses To File(s)
