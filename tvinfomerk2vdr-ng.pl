@@ -218,8 +218,9 @@ $traceclass{'HTSP'} = 0;
 
 $traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
 	#$traceclass{'TVINFO'} |= 0x0040; # XML Merkzettel (parsed)
-$traceclass{'TVDIREKT'} = 1; # 0x01: HTML login
-$traceclass{'TVDIREKT'} |= 0xf0; # 0xf0: schedules
+$traceclass{'TVDIREKT'} = 0; # default
+#$traceclass{'TVDIREKT'} = 1; # 0x01: HTML login
+#$traceclass{'TVDIREKT'} |= 0xf0; # 0xf0: schedules
 
 ## properties and their default
 my %properties;
