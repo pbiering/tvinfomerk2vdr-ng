@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2021 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2022 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -42,6 +42,7 @@
 # 20201205/bie: add optional trace level for debug class
 # 20201222/bie: check for existing DVR channel before try to match timer, align log token
 # 20211130/bie: predefine autodetected opt_dvr if unset
+# 20220719/bie: cosmetic fix of online help, remove hardwired "tvinfo" for service account help
 
 use strict; 
 use warnings; 
@@ -326,8 +327,8 @@ Debug options:
          --wstf                    Write (only) Service raw responses To File(s)
          --wdtf                    Write (only) Dvr raw responses To File(s)
          -R                        Read  (all)  raw responses from files
-         --rsff                    Read  (only) SERVICE raw responses from file(s)
-         --rdff                    Read  (only) DVR raw responses from file(s)
+         --rsff                    Read  (only) Service raw responses From File(s)
+         --rdff                    Read  (only) Dvr raw responses From File(s)
          -K|--sdt <list>           skip DVR timer entries with number from comma separated list
          -E|--sst <list>           skip SERVICE timer entries with number from comma separated list
          -O|--property key=value   define a config property
@@ -580,9 +581,9 @@ if (defined $file_properties) {
 		logging("INFO", "finished reading properties from file: " . $file_properties);
 
 		# check for service_users
-		foreach my $entry (grep /^service\.tvinfo\.user\./o, keys %properties) {
+		foreach my $entry (grep /^service\.$opt_service\.user\./o, keys %properties) {
 			#logging("DEBUG", $entry);
-			if ($entry =~ /^service\.tvinfo\.user\.([^.]+)\.password$/o) {
+			if ($entry =~ /^service\.$opt_service\.user\.([^.]+)\.password$/o) {
 				push @service_users, $1;
 			};
 		};
