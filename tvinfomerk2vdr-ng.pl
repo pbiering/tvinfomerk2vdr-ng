@@ -1173,10 +1173,6 @@ print_dvr_channels(\@channels_dvr_filtered);
 #######################################
 $rc = $module_functions{'service'}->{$setup{'service'}}->{'get_channels'}(\@channels_service);
 
-if ($rc == -1) {
-	logging("NOTICE", "SERVICE: is not supporting channels");
-} else { # SERVICE supporting channels
-
 if ($rc != 0) {
 	logging("CRIT", "SERVICE: get_channels returned an error - STOP");
 	$rc_exit = 4;
@@ -1308,8 +1304,6 @@ if ((defined $opt_u) && (1 == 0)) {
 if (defined $opt_c) {
 	goto("END");
 };
-
-}; # end of SERVICE supporting channels
 
 
 #############################################################
