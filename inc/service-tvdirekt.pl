@@ -240,8 +240,8 @@ sub service_tvdirekt_login() {
 			last;
 		} else {
 			# clear form data
-			undef %form_data; 
-			undef $form_url; 
+			undef %form_data;
+			undef $form_url;
 			$found_username = 0;
 			$found_password = 0;
 		};
@@ -389,7 +389,7 @@ sub service_tvdirekt_get_channels($$;$) {
 # "Betreff","Beginnt am","Beginnt um","Endet am","Endet um","Beschreibung","Kategorien"
 # "ZDF: heute - Wetter","24.07.2022","19:0:00","24.07.2022","19:10:00","Nachrichten, D 2022
 #  Laufzeit: 10 Minuten
-# 
+#
 #  Die Nachrichtensendung des Zweiten Deutschen Fernsehens versorgt die Zuschauer mit aktuellen Meldungen des Tages aus den Bereichen Politik, Wirtschaft, Kultur, Gesellschaft, Sport und Wetter.","TV-GUIDE"
 ################################################################################
 sub service_tvdirekt_get_timers($) {
