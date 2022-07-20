@@ -86,7 +86,8 @@ my $timers_tvdirekt_valid = 0;
 # </form>
 #
 # $traceclass{'TVDIREKT'}:
-#   0x01: dump post data
+# $traceclass{'TVDIREKT'} |= 0x01; # HTML login content
+# $traceclass{'TVDIREKT'} |= 0x02; # HTML login post response
 #
 sub service_tvdirekt_login() {
 	return(0) if (defined $tvdirekt_auth_cookie);
@@ -162,10 +163,10 @@ sub service_tvdirekt_login() {
 
 	$html_raw = decode("utf-8", $html_raw);
 
-	if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x02)) {
-		print "#### TVDIREKT/login CONTENTS BEGIN ####\n";
+	if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x01)) {
+		print "#### TVDIREKT/login CONTENT BEGIN ####\n";
 		print $html_raw;
-		print "#### TVDIREKT/login CONTENTS END   ####\n";
+		print "#### TVDIREKT/login CONTENT END   ####\n";
 	};
 
 	my $parser= HTML::TokeParser::Simple->new(\$html_raw);
@@ -255,7 +256,7 @@ sub service_tvdirekt_login() {
 
 	$post_data = join("\n", @post_array);
 
-	if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x01)) {
+	if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x02)) {
 		print "#### TVDIREKT/login POST RESPONSE BEGIN ####\n";
 		print "#### URL\n";
 		printf "%s\n", $form_url;
@@ -372,9 +373,9 @@ sub service_tvdirekt_get_channels($$;$) {
 # debug
 #
 # $traceclass{'TVDIREKT'}:
-#   0x10: CALENDAR/CSV dump schedules raw
-#   0x20: CALENDAR/CSV dump schedules
-#   0x40: CALENDAR/CSV dump each schedules
+# $traceclass{'TVDIREKT'} |= 0x10; # CALENDAR/CSV native response
+# $traceclass{'TVDIREKT'} |= 0x20; # CALENDAR/CSV raw line
+# $traceclass{'TVDIREKT'} |= 0x40; # CALENDAR/CSV parsed entry
 #
 # return values
 # 0: ok
@@ -488,7 +489,7 @@ sub service_tvdirekt_get_timers($) {
 
 		next if (length($line) == 0);
 
-		if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x40)) {
+		if (defined $traceclass{'TVDIREKT'} && ($traceclass{'TVDIREKT'} & 0x20)) {
 			print "####CALENDAR/CSV RAW LINE ENTRY BEGIN####\n";
 			print $line . "\n";
 			print "####CALENDAR/CSV RAW LINE ENTRY END####\n";

@@ -201,6 +201,7 @@ our $verbose = 0;
 $debugclass{'HTSP'} = 1;
 $debugclass{'TVHEADEND'} = 1;
 $debugclass{'TVINFO'} = 1;
+
 $traceclass{'HTSP'} = 0;
 	#$traceclass{'HTSP'} |= 0x00000002; # JSON dump adapters
 	#$traceclass{'HTSP'} |= 0x00000020; # JSON dump stations
@@ -218,11 +219,8 @@ $traceclass{'HTSP'} = 0;
 	# 0x2000: skipped channels (missing typestr)
 	# 0x4000: skipped channels (not enabled)
 
-$traceclass{'TVINFO'} = 0; # 0x01: XML raw dump stations
-	#$traceclass{'TVINFO'} |= 0x0040; # XML Merkzettel (parsed)
-$traceclass{'TVDIREKT'} = 0; # default
-#$traceclass{'TVDIREKT'} = 1; # 0x01: HTML login
-#$traceclass{'TVDIREKT'} |= 0xf0; # 0xf0: schedules
+$traceclass{'TVINFO'} = 0; # default, see inc/service-tvinfo.pl
+$traceclass{'TVDIREKT'} = 0; # default, see inc/service-tvdirekt.pl
 
 ## properties and their default
 my %properties;
