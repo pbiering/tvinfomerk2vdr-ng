@@ -10,6 +10,11 @@ Prerequisites:
 Usage:
 ------
 
-One-Time run in test mode (not applying any action)
+One-Time run in test mode (not applying any action) for "tvinfo" (default)
 
 ./tvinfomerk2vdr-ng.pl -U <service-user> -P <service-pass> -N
+
+
+One-Time run in test mode (not applying any action) for "tvdirekt"
+
+./tvinfomerk2vdr-ng.pl -U <service-user> -P <service-pass> --service tvdirekt -N
