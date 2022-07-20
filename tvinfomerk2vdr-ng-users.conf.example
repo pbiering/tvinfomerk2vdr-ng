@@ -6,4 +6,4 @@
 ##
 ## Email is optional, if defined the output will be send to receipient
 #
-#SERVICE-User:SERVICE-Password (raw or as hash - optional):Folder (optional):Email (optional)
+#SERVICE-User:SERVICE-Password (raw or as hash - optional):Folder (optional):Email (optional):Service (optional, default: "tvinfo")

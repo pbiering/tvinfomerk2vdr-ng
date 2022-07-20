@@ -32,6 +32,7 @@
 # 20201229/pb: add support for run-disable file
 # 20220429/pb: fix iconv in front of mailx
 # 20220705/pb: increase boot delay from 2 to 3 min
+# 20220720/pb: add support for optional service in config file
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
@@ -129,9 +130,10 @@ Functional options for called script:
 Example for contents of $config:
 
 # Configuration files for shell script wrapper
-#TVinfo-User:TVinfo-Pass:Folder:Email
+#TVinfo-User:TVinfo-Pass:Folder:Email:Service
 Account1:Password1:Folder1:test1@example.com
 Account2:Password2:Folder2:test2@example.com
+Account2:Password2:Folder2:test3@example.com:tvdirekt
 
 END
 }
@@ -339,14 +341,16 @@ check_system || exit 1
 date_start_ut="$(date '+%s')"
 date_start="$(date '+%Y%m%d %H%M%S %Z')"
 
-grep -v '^#' "$config" | while IFS=":" read username password folder email other; do
+grep -v '^#' "$config" | while IFS=":" read username password folder email service other; do
 	if [ -n "$user" -a  "$user" != "$username" ]; then
 		logging "INFO" "skip user: $username"
 		continue
 	fi
 
+	[ -z "$service" ] && service="tvinfo"
+
 	if [ "$opt_user_list" = "1" ]; then
-		logging "INFO" "List entry: $username:$password"
+		logging "INFO" "List entry: $username:$password:$folder:$email:$service"
 		continue
 	fi
 
@@ -377,6 +381,9 @@ grep -v '^#' "$config" | while IFS=":" read username password folder email other
 	fi
 	if [ -n "$properties" ]; then
 		script_options="$script_options --rp $properties"
+	fi
+	if [ -n "$service" ]; then
+		script_options="$script_options --service $service"
 	fi
 
 	result_token="OK"
