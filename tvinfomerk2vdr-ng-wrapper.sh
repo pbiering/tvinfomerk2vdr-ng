@@ -29,14 +29,10 @@
 # 20201203/pb: detect and support mailx from Fedora Linux
 # 20201207/pb: explicitly use mailx on Fedora Linux
 # 20201216/pb: add iconv in front of mailx
-# 20201216/pb: remove iconv in front of mailx
 # 20201229/pb: add support for run-disable file
 # 20220429/pb: fix iconv in front of mailx
 # 20220705/pb: increase boot delay from 2 to 3 min
 # 20220720/pb: add support for optional service in config file
-# 20201229/pb: add support for run-disable file
-# 20220429/pb: fix iconv in front of mailx
-# 20220705/pb: increase boot delay from 2 to 3 min
 
 # TODO/pb: in error case with rc=4 send only one e-mail per day
 
