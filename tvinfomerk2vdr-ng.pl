@@ -43,6 +43,7 @@
 # 20201222/bie: check for existing DVR channel before try to match timer, align log token
 # 20211130/bie: predefine autodetected opt_dvr if unset
 # 20220719/bie: cosmetic fix of online help, remove hardwired "tvinfo" for service account help
+# 20220720/bie: hardcode "tvinfo" as default service, adjust username lookup for services
 
 use strict; 
 use warnings; 
@@ -190,6 +191,7 @@ our %config;
 
 ## define setup
 my %setup;
+$setup{'service.default'} = "tvinfo"; # hardcoded default
 
 ## define debug/trace
 our %debugclass;
@@ -240,7 +242,8 @@ my %properties_descriptions = (
 	'dvr.host.default'		=> "DVR host related default settings",
 	'dvr.host'			=> "DVR host related settings",
 	'service.default'		=> "SERVICE related default settings",
-	'service.tvinfo'		=> "SERVICE related settings",
+	'service.tvinfo'		=> "SERVICE 'tvinfo' related settings",
+	'service.tvdirekt'		=> "SERVICE 'tvdirekt' related settings",
 );
 
 ## filled from properties (configuration) file
@@ -297,7 +300,7 @@ Options:
 
 Service related
          --service <name>          define SERVICE name
-                                     default/configured: $setup{'service'}
+                                     default/configured: $setup{'service.default'}
                                      supported         : $service_list_supported_string
          -U <username>             SERVICE username (default: $username [config-ng.pl])
          -P <password>             SERVICE password (default: $password [config-ng.pl])
@@ -581,14 +584,6 @@ if (defined $file_properties) {
 		};
 		logging("INFO", "finished reading properties from file: " . $file_properties);
 
-		# check for service_users
-		foreach my $entry (grep /^service\.$opt_service\.user\./o, keys %properties) {
-			#logging("DEBUG", $entry);
-			if ($entry =~ /^service\.$opt_service\.user\.([^.]+)\.password$/o) {
-				push @service_users, $1;
-			};
-		};
-
 		# check for dvr_hosts
 		foreach my $entry (grep /^dvr\.host\./o, keys %properties) {
 			#logging("DEBUG", $entry);
@@ -636,7 +631,15 @@ if (defined $opt_service) {
 	$setup{'service'} = $opt_service;
 } else {
 	$setup{'service'} = $setup{'service.default'};
-	logging("NOTICE", "autoselected SERVICE: " . $setup{'service'});
+	logging("NOTICE", "autoselected SERVICE from 'service.default': " . $setup{'service'});
+};
+
+# check for service_users
+foreach my $entry (grep /^service\.$setup{'service'}\.user\./o, keys %properties) {
+	#logging("DEBUG", $entry);
+	if ($entry =~ /^service\.$setup{'service'}\.user\.([^.]+)\.password$/o) {
+		push @service_users, $1;
+	};
 };
 
 ## --dvr
