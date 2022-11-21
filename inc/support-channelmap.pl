@@ -26,6 +26,7 @@
 # 20201222/bie: align log token, try to match also normalized+HD channels
 # 20201223/bie: sort service channels before processing
 # 20220629/bie: remove " Television" ("RTL" issue)
+# 20221121/bie: remove region "Bayern" from "SAT.1"
 
 use strict;
 use warnings;
@@ -124,6 +125,8 @@ sub normalize($) {
 	$input =~ s/Bayerisches/BR/g;
 
 	$input =~ s/ARD - (.*)/$1/g; # remove "ARD - " token
+
+	$input =~ s/(SAT\.1) (Bayern)$/$1/g; # SAT.1
 
 	# shift 'HD'
 	$input =~ s/^(.*) HD (.*)$/$1 $2 HD/ig; # WDR HD Köln
