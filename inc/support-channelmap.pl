@@ -27,6 +27,7 @@
 # 20201223/bie: sort service channels before processing
 # 20220629/bie: remove " Television" ("RTL" issue)
 # 20221121/bie: remove region "Bayern" from "SAT.1"
+# 20221208/bie: remove city "Muenchen" from "RTL"
 
 use strict;
 use warnings;
@@ -127,6 +128,8 @@ sub normalize($) {
 	$input =~ s/ARD - (.*)/$1/g; # remove "ARD - " token
 
 	$input =~ s/(SAT\.1) (Bayern)$/$1/g; # SAT.1
+
+	$input =~ s/(RTL) (Muenchen)$/$1/g; # RTL
 
 	# shift 'HD'
 	$input =~ s/^(.*) HD (.*)$/$1 $2 HD/ig; # WDR HD Köln
