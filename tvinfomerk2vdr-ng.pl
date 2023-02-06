@@ -3,7 +3,7 @@
 # Original (C) & (P) 2003 - 2007 by <macfly> / Friedhelm Büscher as "tvmovie2vdr"
 #   last public release: http://rsync16.de.gentoo.org/files/tvmovie2vdr/tvmovie2vdr-0.5.13.tar.gz
 #
-# Major Refactoring (P) & (C) 2013-2022 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
+# Major Refactoring (P) & (C) 2013-2023 by Peter Bieringer <pb@bieringer.de> as "tvinfomerk2vdr-ng"
 #   for "tvinfo" only other code is removed
 #
 # License: GPLv2
@@ -44,6 +44,7 @@
 # 20211130/bie: predefine autodetected opt_dvr if unset
 # 20220719/bie: cosmetic fix of online help, remove hardwired "tvinfo" for service account help
 # 20220720/bie: hardcode "tvinfo" as default service, adjust username lookup for services
+# 20230206/bie: fix potential "Negative repeat count" on displaying title
 
 use strict; 
 use warnings; 
@@ -1715,7 +1716,7 @@ if (scalar(keys %d_timers_action) > 0) {
 			. " "  . substr(uc((keys(%{$d_timers_action{$d_timer_num}}))[0]), 0, 3)
 			. " "  . strftime("%Y-%m-%d %H%M", localtime($$d_timer_hp{'start_ut'}))
 			. "-"  . strftime("%H%M", localtime($$d_timer_hp{'stop_ut'}))
-			. " '" . $$d_timer_hp{'title'} . "'" . " " x ($titlename_max - length($$d_timer_hp{'title'}))
+			. " '" . shorten_titlename($$d_timer_hp{'title'}) . "'" . " " x ($titlename_max - length(shorten_titlename($$d_timer_hp{'title'})))
 			. " '" . get_dvr_channel_name_by_cid($$d_timer_hp{'cid'}) . "'"
 		;
 	};
