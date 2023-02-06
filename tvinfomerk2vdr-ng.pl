@@ -1754,35 +1754,35 @@ if (scalar(keys %s_timers_action) > 0) {
 			push @d_timers_new, \%d_timer;
 
 			logging($loglevel, "SERVICE-ACTION:"
-				. " tid="     . $s_timer_num
-				. " action="  . $s_timers_action{$s_timer_num}
-				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
-				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
-				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
-				. " d_cid="     . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
-				. " prio="    . $d_timer{'priority'}
-				. " lft="     . $d_timer{'lifetime'}
-				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
+				. " tid="    . $s_timer_num
+				. " action=" . $s_timers_action{$s_timer_num}
+				. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="    . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " d_cid="  . $d_timer{'cid'} . "(" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . ")"
+				. " prio="   . $d_timer{'priority'}
+				. " lft="    . $d_timer{'lifetime'}
+				. " title='" . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
 
 			push @logging_actions_service, ""
-				. " "    . uc($s_timers_action{$s_timer_num})
-				. " "  . strftime("%Y-%m-%d %H%M", localtime($$s_timer_hp{'start_ut'}))
-				. "-"  . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
-				. " '" . shorten_titlename($$s_timer_hp{'title'}) . "'" . " " x ($titlename_max - length(shorten_titlename($$s_timer_hp{'title'})))
-				. " '"   . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . "'"
+				. " "   . uc($s_timers_action{$s_timer_num})
+				. " "   . strftime("%Y-%m-%d %H%M", localtime($$s_timer_hp{'start_ut'}))
+				. "-"   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " '"  . shorten_titlename($$s_timer_hp{'title'}) . "'" . " " x ($titlename_max - length(shorten_titlename($$s_timer_hp{'title'})))
+				. " '"  . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . "'"
 				. "=>'" . get_dvr_channel_name_by_cid($d_timer{'cid'}) . "'"
 			;
 		} else {
 			$loglevel = "NOTICE";
 
 			logging($loglevel, "SERVICE-ACTION:"
-				. " tid="     . $s_timer_num
-				. " action="  . $s_timers_action{$s_timer_num}
-				. " start="   . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
-				. " stop="    . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
-				. " cid="     . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
-				. " title='"  . shorten_titlename($$s_timer_hp{'title'}) . "'"
+				. " tid="    . $s_timer_num
+				. " action=" . $s_timers_action{$s_timer_num}
+				. " start="  . strftime("%Y%m%d-%H%M", localtime($$s_timer_hp{'start_ut'}))
+				. " stop="   . strftime("%H%M", localtime($$s_timer_hp{'stop_ut'}))
+				. " cid="    . $$s_timer_hp{'cid'} . "(" . get_service_channel_name_by_cid($$s_timer_hp{'cid'}) . ")"
+				. " title='" . shorten_titlename($$s_timer_hp{'title'}) . "'"
 			);
 
 			push @logging_actions_service, ""
