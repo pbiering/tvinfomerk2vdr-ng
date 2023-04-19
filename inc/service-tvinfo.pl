@@ -1,6 +1,6 @@
 # Support functions for timer service TVinfo
 #
-# (C) & (P) 2014-2022 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014-2023 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -23,6 +23,7 @@
 # 20220428/bie: enable retry again because pool members behind loadbalancer on TVinfo side are not equally configured (but luckily round-robin is configured on loadbalancer)
 # 20220428/bie: add for troubleshooting toggle for switch between 'LWP' and 'curl', switch back to use of 'LWP' (supporting proxy)
 # 20220622/bie: skip entry in schedule in case of entry has broken start/end time
+# 20230419/bie: change channel parser as XML format changed from name based tree to array
 
 use strict;
 use warnings;
@@ -266,15 +267,21 @@ sub service_tvinfo_get_channels($$;$) {
 	} else {
 		my $xml_list_p = @$data{'station'};
 
-		logging ("INFO", "TVINFO: XML contains amount of stations: " . scalar(keys %$xml_list_p));
+		logging ("INFO", "TVINFO: XML contains amount of stations: " . scalar(keys @$xml_list_p));
 	};
 
 	my $xml_root_p = @$data{'station'};
+	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x04)) {
+		print "#### TVINFO/stations xml_root_p RESPONSE BEGIN ####\n";
+		print Dumper($xml_root_p);
+		print "#### TVINFO/stations xml_root_p RESPONSE END   ####\n";
+	};
 
-	foreach my $name (sort keys %$xml_root_p) {
-		my $id = $$xml_root_p{$name}->{'id'};
+	foreach my $entry (@$xml_root_p) {
+		my $name = $entry->{'name'};
+		my $id = $entry->{'id'};
 
-		my $altnames_p = $$xml_root_p{$name}->{'altnames'}->{'altname'};
+		my $altnames_p = $entry->{'altnames'}->{'altname'};
 
 		my $altnames = "";
 
@@ -298,7 +305,7 @@ sub service_tvinfo_get_channels($$;$) {
 		$tvinfo_AlleSender_id_list{$id}->{'altnames'} = $altnames;
 
 		my $selected = 0;
-		if (defined $$xml_root_p{$name}->{'selected'} && $$xml_root_p{$name}->{'selected'} eq "selected") {
+		if (defined $entry->{'selected'} && $entry->{'selected'} eq "selected") {
 			$selected = 1;
 			$tvinfo_MeineSender_id_list{$id}->{'name'} = $name;
 			$tvinfo_MeineSender_id_list{$id}->{'altnames'} = $altnames;
