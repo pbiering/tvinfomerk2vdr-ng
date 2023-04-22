@@ -24,6 +24,7 @@
 # 20220428/bie: add for troubleshooting toggle for switch between 'LWP' and 'curl', switch back to use of 'LWP' (supporting proxy)
 # 20220622/bie: skip entry in schedule in case of entry has broken start/end time
 # 20230419/bie: change channel parser as XML format changed from name based tree to array
+# 20230422/bie: detect empty title and display a notice
 
 use strict;
 use warnings;
@@ -559,6 +560,11 @@ sub service_tvinfo_get_timers($) {
 
 		my $start_ut = str2time($xml_starttime);
 		my $stop_ut  = str2time($xml_endtime  );
+
+		if ((ref($xml_title) eq 'HASH') || (ref($xml_title) eq 'ARRAY')) {
+			$xml_title = "TITLE_EMPTY_OR_UNSUPPORTED";
+			logging("NOTICE", "TVINFO: no valid title: start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' uid='$$xml_entry_p{'uid'}");
+		};
 
 		if (! defined $start_ut) {
 			logging("WARN", "TVINFO: SKIP ('start' broken): start='$xml_starttime' end='$xml_endtime' channel='$xml_channel' title='$xml_title'");
