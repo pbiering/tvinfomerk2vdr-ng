@@ -80,8 +80,18 @@ my $use_curl = 0;
 # Helper functions
 ################################################################################
 ## convert password
-sub service_tvinfo_convert_password($) {
-	return("{MD5}" . md5_hex($_[0]));
+# $1: password $2: flag (if defined, do not add prefix)
+sub service_tvinfo_convert_password($;$) {
+	if ($_[0] !~ /^{MD5}/) {
+		logging("NOTICE", "TVinfo password is not given as hash (conversion used for security reasons)");
+		if (defined $_[1]) {
+			return(md5_hex($_[0]));
+		} else {
+			return("{MD5}" . md5_hex($_[0]));
+		};
+	} else {
+		return($_[0]);
+	};
 };
 
 ## replace tokens in request
@@ -99,15 +109,10 @@ sub request_replace_tokens($) {
 
 	logging("DEBUG", "TVINFO: request  original: " . $request);
 	logging("DEBUG", "TVINFO: username         : " . $config{'service.user'});
-	logging("DEBUG", "TVINFO: password         : *******");
+	logging("DEBUG", "TVINFO: password         : " . substr($config{'service.password'}, 0, 3) . "*****");
 
 	# replace username token
-	my $passwordhash;
-	if ($config{'service.password'} =~ /^{MD5}(.*)/) {
-		$passwordhash = $1;
-	} else {
-		$passwordhash = md5_hex($config{'service.password'});
-	};
+	my $passwordhash = service_tvinfo_convert_password($config{'service.password'}, 1);
 
 	$request =~ s/<USERNAME>/$config{'service.user'}/;
 	$request =~ s/<PASSWORDHASH>/$passwordhash/;

@@ -799,14 +799,6 @@ if (defined $config{'service.user'}) {
 			logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.password'});
 			exit 1;
 		};
-
-		if ($setup{'service'} eq "tvinfo") {
-			# TODO: move such option checks in service module
-			if ($config{'service.password'} !~ /^{MD5}/) {
-				$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
-				logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons): $config{'service.password'}");
-			};
-		};
 	};
 };
 
