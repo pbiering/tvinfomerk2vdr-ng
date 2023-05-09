@@ -25,6 +25,7 @@
 # 20220622/bie: skip entry in schedule in case of entry has broken start/end time
 # 20230419/bie: change channel parser as XML format changed from name based tree to array
 # 20230422/bie: detect empty title and display a notice
+# 20230509/bie: add initial html login support
 
 use strict;
 use warnings;
@@ -65,6 +66,14 @@ $tvinfo_client->agent($user_agent);
 if (defined $config{'proxy'}) {
 	$tvinfo_client->proxy('http', $config{'proxy'});
 };
+
+my $tvinfo_url_base      = "https://www.tvinfo.de";
+my $tvinfo_url_login     = "https://www.tvinfo.de/";
+my $tvinfo_view_calendar = "https://www.tvinfo.de/component/pit_data/?view=calendar";
+
+my $tvinfo_login_cookie;
+my $tvinfo_auth_cookie;
+
 
 ## local values
 my %tvinfo_AlleSender_id_list;
@@ -120,6 +129,294 @@ sub request_replace_tokens($) {
 	# logging("DEBUG", "request result   : " . $request); # disabled, showing hashed password
 	return($request)
 };
+
+
+## login to get session cookie
+#
+# step 1: run through HTML and retrieve the form tokens
+#
+# $traceclass{'TVINFO'}:
+# $traceclass{'TVINFO'} |= 0x01; # HTML login content
+# $traceclass{'TVINFO'} |= 0x02; # HTML login post response
+#
+sub service_tvinfo_login() {
+	return(0) if (defined $tvinfo_auth_cookie);
+
+	my $ReadLoginHTML = undef;
+	my $ReadLoginResponseHTML = undef;
+	my $WriteLoginHTML = undef;
+	my $WriteLoginResponseHTML = undef;
+	my $html_raw;
+
+	if (! defined $config{'service.user'} || $config{'service.user'} eq "") {
+		logging("ERROR", "service.user empty or undefined - FIX CODE");
+		exit 2;
+	};
+	if (! defined $config{'service.password'} || $config{'service.password'} eq "") {
+		logging("ERROR", "service.password empty or undefined - FIX CODE");
+		exit 2;
+	};
+
+	logging("DEBUG", "TVINFO: username         : " . $config{'service.user'});
+	logging("DEBUG", "TVINFO: password         : " . substr($config{'service.password'}, 0, 3) . "*****");
+
+	if ($config{'service.source.type'} eq "file") {
+		$ReadLoginHTML = $config{'service.source.file.prefix'} . "-login.html";
+		$ReadLoginResponseHTML = $config{'service.source.file.prefix'} . "-loginresponse.html";
+	} elsif ($config{'service.source.type'} eq "network+store") {
+		$WriteLoginHTML = $config{'service.source.file.prefix'} . "-login.html";
+		$WriteLoginResponseHTML = $config{'service.source.file.prefix'} . "-loginresponse.html";
+	} elsif ($config{'service.source.type'} eq "network") {
+	} else {
+		die "service.source.type is not supported: " . $config{'service.source.type'} . " - FIX CODE";
+	};
+
+	if (defined $ReadLoginHTML) {
+		if (! -e $ReadLoginHTML) {
+			logging("ERROR", "TVINFO: given raw file for 'login' is missing (forget -W before?): " . $ReadLoginHTML);
+			return(1);
+		};
+		# load 'login' from file
+		logging("INFO", "TVINFO: read HTML contents of 'login' from file: " . $ReadLoginHTML);
+		if(!open(FILE, "<$ReadLoginHTML")) {
+			logging("ERROR", "TVINFO: can't read HTML contents of 'login' from file: " . $ReadLoginHTML);
+			return(1);
+		};
+		binmode(FILE);
+		while(<FILE>) {
+			$html_raw .= $_;
+		};
+		close(FILE);
+		logging("INFO", "TVINFO: HTML contents of 'login' read from file: " . $ReadLoginHTML);
+	} else {
+		logging ("INFO", "TVINFO: fetch 'login' via HTML interface");
+
+		my $request = $tvinfo_url_login;
+
+		# create curl request (-s: silent, -v: display header)
+		$html_raw = `curl -s -v -A '$user_agent' -k '$request' 2>&1`;
+
+		if (defined $WriteLoginHTML) {
+			logging("NOTICE", "TVINFO: write HTML contents of 'login' to file: " . $WriteLoginHTML);
+			if(! open(FILE, ">$WriteLoginHTML")) {
+				logging("ERROR", "TVINFO: can't write HTML contents of 'login' to file: " . $WriteLoginHTML . " (" . $! . ")");
+			} else {
+				print FILE $html_raw;
+				close(FILE);
+				logging("NOTICE", "TVINFO: HTML contents of 'login' written to file: " . $WriteLoginHTML);
+			};
+		};
+
+		if ($html_raw !~ /name=\"user\"/o) {
+			logging("ERROR", "TVINFO: 'login' page fetched from 'tvinfo' is missing 'user' (\"$request\"): " . substr($html_raw, 0, 320) . "...");
+			return(1);
+		};
+	};
+
+	# extract login cookie
+	for my $line (split("\n", $html_raw)) {
+		# skip not-response header lines
+		next if $line !~ /^< /o;
+		next if $line !~ /< Set-Cookie: ([^;]+)/io;
+		next if $line !~ /< Set-Cookie: (TVinfo=[^;]+)/io;
+		$tvinfo_login_cookie = $1;
+		last;
+	};
+
+	if (defined $tvinfo_login_cookie) {
+		logging("DEBUG", "TVINFO: login cookie found in 'login response': " . $tvinfo_login_cookie);
+	} else {
+		logging("ERROR", "TVINFO: login cookie not found in 'login response' (STOP)");
+		return(1);
+	};
+
+
+	$html_raw = decode("utf-8", $html_raw);
+
+	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x01)) {
+		print "#### TVINFO/login CONTENT BEGIN ####\n";
+		print $html_raw;
+		print "#### TVINFO/login CONTENT END   ####\n";
+	};
+
+	my $parser= HTML::TokeParser::Simple->new(\$html_raw);
+	my %form_data;
+	my $form_url;
+	my $found_username = 0;
+	my $found_password = 0;
+
+	# look for tag 'form'
+	while (my $anchor = $parser->get_tag('form')) {
+		# look for attr 'action'
+		my $id = $anchor->get_attr('id');
+		next unless defined($id);
+		next unless ($id =~ /^loginForm$/io);
+
+		my $action = $anchor->get_attr('action');
+		next unless defined($action);
+		next unless ($action =~ /\//o);
+
+		# look for attr 'method'
+		my $method = lc($anchor->get_attr('method'));
+		next unless defined($method);
+		next unless ($method =~ /^(post)$/io);
+
+		logging("TRACE", "TVINFO: 'login' form found: method=" . $method . " action=" . $action . "id=" . $id);
+		if ($action =~ /^https?:/oi) {
+			$form_url = $action;
+		} else {
+			$form_url = $tvinfo_url_base . $action;
+		};
+
+		# look for tag 'input'
+		while (my $anchor = $parser->get_tag("input", "/form")) {
+			if ($anchor->is_end_tag('/form')) {
+				# end of form
+				last;
+			};
+
+			my ($name, $value, $type);
+
+			# look for attr 'name'
+			$name = $anchor->get_attr('name');
+			next unless defined($name);
+			logging("TRACE", "TVINFO: 'login' form input line found: name=" . $name);
+
+			if ($name =~ /user/oi) {
+				# input field for 'username'
+				$form_data{$name} = $config{'service.user'};
+				logging("TRACE", "TVINFO: 'login' form 'username' input found: " . $name);
+				$found_username = 1;
+				next;
+			};
+
+			# look for attr 'type'
+			$type = lc($anchor->get_attr('type'));
+			if (defined($type)) {
+				if ($type eq "hidden") {
+					# hidden input field, overtake value
+					$value = lc($anchor->get_attr('value'));
+					next unless defined($value);
+					$form_data{$name} = $value;
+					logging("TRACE", "TVINFO: 'login' form hidden input found: " . $name . "=" . $value);
+				} elsif ($type eq "password") {
+					if ($config{'service.password'} =~ /^{MD5}/) {
+						logging("ERROR", "TVINFO: login password not provided in clear text, cannot continue");
+						return(1);
+					};
+					# input field for 'password'
+					$form_data{$name} = $config{'service.password'};
+					logging("TRACE", "TVINFO: 'login' form 'password' input found: " . $name);
+					$found_password = 1;
+				} else {
+					next;
+				};
+			} else {
+				# don't care
+				next;
+			};
+		};
+
+		# check form contents
+		if ($found_username == 1 && $found_password == 1 && defined $form_url) {
+			last;
+		} else {
+			# clear form data
+			undef %form_data;
+			undef $form_url;
+			$found_username = 0;
+			$found_password = 0;
+		};
+	};
+
+	# create post request
+	my (@post_array, $form_option, $post_data);
+	for my $key (keys %form_data) {
+		$form_option .= " -F '" . $key . "=" . $form_data{$key} . "'";
+		push @post_array, $key . "=" . $form_data{$key};
+	};
+
+	$form_option .=  " -F keeplogin=off";
+	push @post_array, "keeplogin=off";
+
+	$form_option .=  " -F loginbutton=ANMELDEN";
+	push @post_array, "loginbutton=ANMELDEN";
+
+	$post_data = join("\n", @post_array);
+
+	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x02)) {
+		print "#### TVINFO/login POST RESPONSE BEGIN ####\n";
+		print "#### URL\n";
+		printf "%s\n", $form_url;
+		print "#### FORM OPTION\n";
+		printf "%s\n", $form_option;
+		print "#### data\n";
+		printf "%s\n", $post_data;
+		print "#### TVINFO/login POST RESPONSE END   ####\n";
+	};
+
+	if (defined $ReadLoginResponseHTML) {
+		if (! -e $ReadLoginResponseHTML) {
+			logging("ERROR", "TVINFO: given raw file for 'login response' is missing (forget -W before?): " . $ReadLoginResponseHTML);
+			return(1);
+		};
+		# load 'login' from file
+		logging("INFO", "TVINFO: read HTML contents of 'login response' from file: " . $ReadLoginResponseHTML);
+		if(!open(FILE, "<$ReadLoginResponseHTML")) {
+			logging("ERROR", "TVINFO: can't read HTML contents of 'login response' from file: " . $ReadLoginResponseHTML);
+			return(1);
+		};
+		binmode(FILE);
+		while(<FILE>) {
+			$html_raw .= $_;
+		};
+		close(FILE);
+		logging("INFO", "TVINFO: HTML contents of 'login response' read from file: " . $ReadLoginResponseHTML);
+	} else {
+		logging ("INFO", "TVINFO: fetch 'login response' via HTML interface");
+
+		# create curl request (-s: silent, -v: display header)
+		$html_raw = `curl -s -v --cookie '$tvinfo_login_cookie'  -A '$user_agent' -k $form_option '$form_url' 2>&1`;
+
+		if (defined $WriteLoginResponseHTML) {
+			logging("NOTICE", "TVINFO: write HTML contents of 'login response' to file: " . $WriteLoginResponseHTML);
+			if(! open(FILE, ">$WriteLoginResponseHTML")) {
+				logging("ERROR", "TVINFO: can't write HTML contents of 'login repsonse' to file: " . $WriteLoginResponseHTML . " (" . $! . ")");
+			} else {
+				print FILE $html_raw;
+				close(FILE);
+				logging("NOTICE", "TVINFO: HTML contents of 'login response' written to file: " . $WriteLoginResponseHTML);
+			};
+		};
+
+		if ($html_raw !~ /< Set-Cookie:/io) {
+			logging("ERROR", "TVINFO: 'login repsonse' page fetched from 'tvinfo' is missing 'Set-Cookie:' (\"$form_url\"): " . substr($html_raw, 0, 320) . "...");
+			return(1);
+		};
+	};
+
+	# extract authentication cookie
+	for my $line (split("\n", $html_raw)) {
+		# skip not-response header lines
+		next if $line !~ /^< /o;
+		next if $line !~ /< Set-Cookie: ([^;]+)/io;
+		next if $line !~ /< Set-Cookie: (tvuserhash=[^;]+)/io;
+		$tvinfo_auth_cookie = $1;
+		last;
+	};
+
+	if (defined $tvinfo_auth_cookie) {
+		logging("DEBUG", "TVINFO: authentication cookie found in 'login response': " . $tvinfo_auth_cookie);
+	} else {
+		logging("ERROR", "TVINFO: authentication cookie not found in 'login response' (STOP)");
+		return(1);
+	};
+
+	die;
+
+	return(0);
+};
+
 
 ################################################################################
 ################################################################################
@@ -178,6 +475,9 @@ sub service_tvinfo_get_channels($$;$) {
 	} else {
 		# Fetch 'Sender' via XML interface
 		logging ("INFO", "TVINFO: fetch stations via XML interface");
+
+		my $rc = service_tvinfo_login();
+		return (1) if ($rc != 0);
 
 		my $request = request_replace_tokens("https://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
