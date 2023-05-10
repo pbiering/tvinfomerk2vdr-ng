@@ -483,9 +483,6 @@ sub service_tvinfo_get_channels($$;$) {
 		# Fetch 'Sender' via XML interface
 		logging ("INFO", "TVINFO: fetch stations via XML interface");
 
-		my $rc = service_tvinfo_login();
-		return (1) if ($rc != 0);
-
 		my $request = request_replace_tokens("https://www.tvinfo.de/external/openCal/stations.php?username=<USERNAME>&password=<PASSWORDHASH>");
 
 		logging("DEBUG", "TVINFO: start request: " . $request);
