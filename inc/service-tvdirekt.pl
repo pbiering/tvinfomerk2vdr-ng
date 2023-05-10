@@ -467,7 +467,7 @@ sub service_tvdirekt_get_timers($) {
 	};
 
 	if ($csv_raw !~ /"Betreff","Beginnt am","Beginnt um","Endet am","Endet um","Beschreibung","Kategorien"/o) {
-		logging ("ALERT", "TVDIREKT: CALENDAR/CVS of timer has not supported header please check for latest version and contact asap script development");
+		logging ("ALERT", "TVDIREKT: CALENDAR/CSV of timer has not supported header please check for latest version and contact asap script development");
 		return(1);
 	};
 
