@@ -68,11 +68,13 @@ if (defined $config{'proxy'}) {
 };
 
 my $tvinfo_url_base      = "https://www.tvinfo.de";
-my $tvinfo_url_login     = "https://www.tvinfo.de/";
-my $tvinfo_view_calendar = "https://www.tvinfo.de/component/pit_data/?view=calendar";
+my $tvinfo_url_login     = $tvinfo_url_base . "/";
+my $tvinfo_channels      = $tvinfo_url_base . "/sender/meine-sender";
+my $tvinfo_timers        = $tvinfo_url_base . "/merkzettel";
 
 my $tvinfo_login_cookie;
 my $tvinfo_auth_cookie;
+my $tvinfo_user_cookie;
 
 
 ## local values
@@ -400,9 +402,9 @@ sub service_tvinfo_login() {
 		# skip not-response header lines
 		next if $line !~ /^< /o;
 		next if $line !~ /< Set-Cookie: ([^;]+)/io;
-		next if $line !~ /< Set-Cookie: (tvuserhash=[^;]+)/io;
-		$tvinfo_auth_cookie = $1;
-		last;
+		$tvinfo_auth_cookie = $1 if $line =~ /< Set-Cookie: (tvuserhash=[^;]+)/io;
+		$tvinfo_user_cookie = $1 if $line =~ /< Set-Cookie: (tvusername=[^;]+)/io;
+		last if (defined $tvinfo_auth_cookie && defined $tvinfo_user_cookie);
 	};
 
 	if (defined $tvinfo_auth_cookie) {
@@ -412,7 +414,12 @@ sub service_tvinfo_login() {
 		return(1);
 	};
 
-	die;
+	if (defined $tvinfo_user_cookie) {
+		logging("DEBUG", "TVINFO: user           cookie found in 'login response': " . $tvinfo_user_cookie);
+	} else {
+		logging("ERROR", "TVINFO: user           cookie not found in 'login response' (STOP)");
+		return(1);
+	};
 
 	return(0);
 };
