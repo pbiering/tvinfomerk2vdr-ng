@@ -25,7 +25,8 @@
 # 20220622/bie: skip entry in schedule in case of entry has broken start/end time
 # 20230419/bie: change channel parser as XML format changed from name based tree to array
 # 20230422/bie: detect empty title and display a notice
-# 20230509/bie: add initial html login support
+# 20230509/bie: add initial HTML login support
+# 20230511/bie: add Merkzettel HTML parser
 
 use strict;
 use warnings;
@@ -36,10 +37,19 @@ use LWP;
 use LWP::Protocol::https;
 use HTTP::Request::Common;
 use HTTP::Date;
-use XML::Simple;
 use Encode;
 #use Date::Manip;
 use Digest::MD5 qw(md5_hex);
+
+# XML parser
+use XML::Simple;
+
+# HTML parser
+use HTML::Parser;
+use HTML::TreeBuilder;
+use HTML::StripScripts::Parser;
+use HTML::TokeParser::Simple;
+
 
 ## debug/trace information
 our %traceclass;
@@ -668,9 +678,9 @@ sub service_tvinfo_get_channels($$;$) {
 
 ################################################################################
 ################################################################################
-# get timers (aka schedules/Merkzettel) from TVinfo
-# arg1: pointer to channel array
-# arg2: pointer to config
+# get timers (aka schedules/Merkzettel) from TVinfo via legacy XML interface
+# arg1: pointer to timers array
+#
 # debug
 #
 # $traceclass{'TVINFO'}:
@@ -697,7 +707,7 @@ sub service_tvinfo_get_channels($$;$) {
 #          'format' => 'Nachrichten'
 #        };
 ################################################################################
-sub service_tvinfo_get_timers($) {
+sub service_tvinfo_get_timers_xml($) {
 	my $timers_ap = $_[0];
 
 	my @xml_list;
@@ -945,6 +955,327 @@ sub service_tvinfo_get_timers($) {
 	logging("DEBUG", "TVINFO: finish XML timer analysis");
 
 	return(0);
+};
+
+
+################################################################################
+################################################################################
+# get timers (aka schedules/Merkzettel) from TVinfo via legacy XML interface
+# arg1: pointer to timers array
+#
+# debug
+#
+# $traceclass{'TVINFO'}:
+#   0x110: HTML dump schedules raw
+#   0x120: HTML dump schedules
+#   0x140: HTML dump each schedules
+#
+# return values
+# 0: ok
+# 1: error
+# 2: list empty
+#
+# HTML structure:
+# <form action="/merkzettel" method="post" name="rList" target="ctrlFrame">
+#   <table class="list" id="reminderList">
+#   	  <tr class="lightBlue sh_w_v">
+#   	  <th class="t1">Sender</th>
+#	  <th class="t2">Datum</th>
+#	  <th class="t3">Uhrzeit</th>
+#	  <th class="t4">bis</th>
+#	  ...
+#	  </tr>
+#      <tr class="lightBlue sh_w_v" id="TR1677653580">
+#	<td class="t1"><em class="SD_bfs slogo"  title="TV Sender: BR"><span>BR</span></em></td>
+#	<td class="t2">DO 11.5.</td>
+#	<td class="t3"><span class="tvTime">20:15</span></td>
+#	<td class="t4">21:00</td>
+#	<td class="t5"><input type="hidden" name="sidnr[1677653580]" value="1677653580" /><a href="/fernsehprogramm/1677653580-quer" class="bold">quer</a> <i>... durch die Woche mit Christoph Süß&nbsp;</i></td>
+#	  ...
+#      </tr>
+################################################################################
+sub service_tvinfo_get_timers_html($) {
+	my $timers_ap = $_[0];
+
+	logging ("DEBUG", "TVINFO: fetch timers");
+
+	my $html_raw;
+
+	my $ReadScheduleHTML = undef;
+	my $WriteScheduleHTML = undef;
+
+	if ($config{'service.source.type'} eq "file") {
+		$ReadScheduleHTML = $config{'service.source.file.prefix'} . "-merkzettel.html";
+	} elsif ($config{'service.source.type'} eq "network+store") {
+		$WriteScheduleHTML = $config{'service.source.file.prefix'} . "-merkzettel.html";
+	} elsif ($config{'service.source.type'} eq "network") {
+	} else {
+		die "service.source.type is not supported: " . $config{'service.source.type'} . " - FIX CODE";
+	};
+
+	if (defined $ReadScheduleHTML) {
+		if (! -e $ReadScheduleHTML) {
+			logging("ERROR", "TVINFO: given raw file for timers is missing (forget -W before?): " . $ReadScheduleHTML);
+			return(1);
+		};
+		# load 'TV-Planer/RSS' from file
+		logging("INFO", "TVINFO: read MERKZETTEL/HTML contents of timers from file: " . $ReadScheduleHTML);
+		if(!open(FILE, "<$ReadScheduleHTML")) {
+			logging("ERROR", "TVINFO: can't read MERKZETTEL/HTML contents of timers from file: " . $ReadScheduleHTML);
+			return(1);
+		};
+		binmode(FILE);
+		while(<FILE>) {
+			$html_raw .= $_;
+		};
+		close(FILE);
+		logging("INFO", "TVINFO: MERKZETTEL/HTML contents of timers read from file: " . $ReadScheduleHTML);
+	} else {
+		# Fetch 'TV-Planer/RSS'
+		logging ("INFO", "TVINFO: fetch timers via MERKZETTEL/HTML interface");
+
+		my $rc = service_tvinfo_login();
+		return (1) if ($rc != 0);
+
+		my $request = $tvinfo_timers;
+		logging("TRACE", "TVINFO: execute: curl -b '$tvinfo_auth_cookie' -b '$tvinfo_user_cookie' -A '$user_agent' -k '$request'");
+		$html_raw = `curl -b '$tvinfo_auth_cookie' -b '$tvinfo_user_cookie' -A '$user_agent' -k '$request' 2>/dev/null`;
+
+		if (defined $WriteScheduleHTML) {
+			logging("NOTICE", "TVINFO: write MERKZETTEL/HTML contents of timers to file: " . $WriteScheduleHTML);
+			if (! open(FILE, ">$WriteScheduleHTML")) {
+				logging("ERROR", "TVINFO: can't write MERKZETTEL/HTML contents of timers to file: " . $WriteScheduleHTML . " (" . $! . ")");
+				return(1);
+			};
+			print FILE $html_raw;
+			close(FILE);
+			logging("NOTICE", "TVINFO: MERKZETTEL/HTML contents of timers written to file: " . $WriteScheduleHTML);
+		};
+	};
+
+	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x110)) {
+		print "#### TVINFO/timers MERKZETTEL/HTML NATIVE RESPONSE BEGIN ####\n";
+		print $html_raw;
+		print "#### TVINFO/timers MERKZETTEL/HTML NATIVE RESPONSE END   ####\n";
+	};
+
+	if ($html_raw !~ /"Merkzettel"/o) {
+		logging ("ALERT", "TVINFO: MERKZETTEL/HTML of timer has not supported content, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+
+	####################################
+	## MERKZETTEL/HTML timer analysis
+	####################################
+
+	logging("DEBUG", "TVINFO: start MERKZETTEL/HTML timer analysis");
+
+	$html_raw = decode("utf-8", $html_raw);
+
+	# Run through entries of MERKZETTEL/HTML
+	my $parser= HTML::TokeParser::Simple->new(\$html_raw);
+
+	## look for "form" around timers
+	my $timer_start_found = 0;
+	while (my $anchor = $parser->get_tag('form')) {
+		# look for attr 'action'
+		my $action = $anchor->get_attr('action');
+		next unless defined($action);
+		next unless ($action eq "/merkzettel");
+		$timer_start_found = 1;
+		last;
+	};
+
+	if ($timer_start_found != 1) {
+		logging ("WARN", "TVINFO: MERKZETTEL/HTML found no timer section, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	logging("DEBUG", "TVINFO: found MERKZETTEL/HTML timer section");
+
+
+	## look for table header
+	my $timer_header_found = 0;
+	while (my $anchor = $parser->get_tag('table')) {
+		# look for attr 'id'
+		my $id = $anchor->get_attr('id');
+		next unless defined($id);
+		next unless ($id eq "reminderList");
+		$timer_header_found = 1;
+		last;
+	};
+
+	if ($timer_header_found != 1) {
+		logging ("WARN", "TVINFO: MERKZETTEL/HTML found no timer header, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	logging("DEBUG", "TVINFO: found MERKZETTEL/HTML timer header");
+
+	sub reformat_date_time($$) {
+		# %d.%d.%d -> %Y-%m-%d
+		$_[0] =~ /^(\d+)\.(\d+)\.(\d+)$/o;
+		my $date = sprintf("%04d-%02d-%02d", $3, $2, $1);
+
+		# %d:%d:%d -> %H:%M:%S
+		$_[1] =~ /^(\d+):(\d+):(\d+)$/o;
+		my $time = sprintf("%02d:%02d:%02d", $1, $2, $3);
+
+		return $date . " " . $time;
+	};
+
+
+	## run through rows
+	my %timer_columns;
+	my $id;
+
+	my $timer_complete = 0;
+	my %timer_entry;
+	my %timer_input;
+	while (my $anchor = $parser->get_token) {
+		if ($anchor->is_start_tag('tr')) {
+			# look for attr 'id'
+			$id = $anchor->get_attr('id');
+			# strip leading chars
+			$id = $1 if ($id =~ /^[A-Za-z]+([0-9]+)/);
+			next;
+		};
+
+		if ($anchor->is_start_tag('th')) {
+			## parse for table header
+			# look for attr 'class'
+			my $class = $anchor->get_attr('class');
+			next unless defined($class);
+			next unless ($class =~ /^t/o);
+			my $text = $parser->get_text();
+			if ($text =~ /^[a-z]+/io) {
+				# all good
+			} elsif ($class eq "t5") {
+				# assume t5 <-> "title"
+				$text = "Titel";
+			} else {
+				next;
+			};
+			$timer_columns{$class} =  $text;
+			logging("DEBUG", "TVINFO: MERKZETTEL/HTML timer header column found: " . $class . "='" . $text . "'");
+		};
+
+		if ($anchor->is_start_tag('td')) {
+			# look for attr 'class'
+			my $class = $anchor->get_attr('class');
+			next unless defined($class);
+			next unless (defined $timer_columns{$class}); # td/class was not found in header before
+			my $text;
+			if ($timer_columns{$class} eq "Sender") {
+				# <td class="t1"><em class="SD_bfs slogo"  title="TV Sender: BR"><span>BR</span></em></td>
+				$anchor = $parser->get_tag('span');
+				$text = $parser->get_text();
+				next if (! defined $text); 
+
+			} elsif ($timer_columns{$class} eq "Uhrzeit") {
+				# <td class="t3"><span class="tvTime">00:20</span></td>
+				$anchor = $parser->get_tag('span');
+				$text = $parser->get_text();
+				next if (! defined $text); 
+
+			} elsif ($timer_columns{$class} eq "Datum") {
+				# <td class="t2">DO 25.5.</td>
+				$text = $parser->get_text();
+				next if (! defined $text); 
+				$text = $1 if ($text =~ /^.* ([0-9]+\.[0-9]+\.)$/o); # strip leading weekday
+
+			} elsif ($timer_columns{$class} eq "Titel") {
+				# td class="t5"><input type="hidden" name="sidnr[1677653586]" value="1677653586" /><a href="/fernsehprogramm/1677653586-ringlstetter" class="bold">Ringlstetter</a> <i>&nbsp;</i></td>
+				$anchor = $parser->get_tag('a');
+				$text = $parser->get_text();
+				$text =~ s/‘/\'/g;  # convert special chars
+				$text =~ s/\"/\'/g; # convert special chars
+				$text =~ s/ +$//o;  # remove trailing spaces
+				next if (! defined $text); 
+
+				# timer complete
+				$timer_complete = 1;
+			} else {
+				$text = $parser->get_text();
+			};
+
+			$timer_input{$timer_columns{$class}} = $text;
+
+			logging("DEBUG", "TVINFO: MERKZETTEL/HTML timer data found: id=" . $id . " => " . $timer_columns{$class} . ": >" . $text . "<");
+
+			if ($timer_complete == 1) {
+				# get current year
+				my $year = strftime("%Y", localtime);
+				my $ut = strftime("%s", localtime);
+				my $year_last = $year - 1;
+
+				my $html_starttime = reformat_date_time($timer_input{'Datum'} . $year, $timer_input{'Uhrzeit'} . ":00");
+				my $start_ut = str2time($html_starttime);
+				if ($start_ut > $ut + (6 * 30 *86400)) {
+					# catch rollover (timers in the past)
+					$html_starttime = reformat_date_time($timer_input{'Datum'} . $year_last, $timer_input{'Uhrzeit'} . ":00");
+					$start_ut = str2time($html_starttime);
+				};
+
+				my $html_endtime = reformat_date_time($timer_input{'Datum'} . $year, $timer_input{'bis'} . ":00");
+				my $stop_ut = str2time($html_endtime);
+				if ($stop_ut > $ut + (6 * 30 *86400)) {
+					# catch rollover (timers in the past)
+					$html_endtime = reformat_date_time($timer_input{'Datum'} . $year_last, $timer_input{'bis'} . ":00");
+					$stop_ut = str2time($html_endtime);
+				};
+
+				if ($start_ut > $stop_ut) {
+					# timer end next day
+					$stop_ut += 86400; # this is not daylight saving safe
+				};
+
+				$timer_entry{'tid'} = $id;
+				$timer_entry{'start_ut'} = $start_ut;
+				$timer_entry{'stop_ut'} = $stop_ut;
+				$timer_entry{'title'} = $timer_input{'Titel'};
+				$timer_entry{'service_data'} = "tvinfo:" . $config{'service.user'};
+				$timer_entry{'cid'} = $tvinfo_channel_id_by_name{$timer_input{'Sender'}};
+
+				logging("DEBUG", "TVINFO: found timer:"
+					. " tid="      . $timer_entry{'tid'}
+					. " start="    . $html_starttime . " (" . strftime("%Y%m%d-%H%M", localtime($start_ut)) . ")"
+					. " end="      . $html_endtime   . " (" . strftime("%Y%m%d-%H%M", localtime($stop_ut)) . ")"
+					. " channel='" . $timer_input{'Sender'} . "' (" . $timer_entry{'cid'} . ")"
+					. " title='"   . $timer_entry{'title'} . "'"
+					. " s_d="      . $timer_entry{'service_data'}
+				);
+
+				push @$timers_ap, \%timer_entry;
+
+				$timer_complete = 0; # reset
+			};
+		};
+	};
+
+	logging("DEBUG", "TVINFO: MERKZETTEL/HTML finish timer analysis");
+
+	return(0);
+};
+
+
+################################################################################
+################################################################################
+# get timers (aka schedules/Merkzettel) from TVinfo
+# arg1: pointer to timers array
+#
+################################################################################
+sub service_tvinfo_get_timers($) {
+	my $rc;
+
+	# via legacy XML
+	$rc = service_tvinfo_get_timers_xml($_[0]);
+
+#	# via HTML
+#	$rc = service_tvinfo_get_timers_html($_[0]);
+
+	return($rc);
 };
 
 
