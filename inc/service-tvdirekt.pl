@@ -25,7 +25,6 @@ use HTML::StripScripts::Parser;
 use HTML::TokeParser::Simple;
 use Encode;
 use Text::CSV;
-use Digest::MD5 qw(md5_hex);
 
 ## debug/trace information
 our %traceclass;
