@@ -510,18 +510,6 @@ sub service_tvdirekt_get_timers($) {
 			next;
 		};
 
-		sub reformat_date_time($$) {
-			# %d.%d.%d -> %Y-%m-%d
-			$_[0] =~ /^(\d+)\.(\d+)\.(\d+)$/o;
-			my $date = sprintf("%04d-%02d-%02d", $3, $2, $1);
-
-			# %d:%d:%d -> %H:%M:%S
-			$_[1] =~ /^(\d+):(\d+):(\d+)$/o;
-			my $time = sprintf("%02d:%02d:%02d", $1, $2, $3);
-
-			return $date . " " . $time;
-		};
-
 		my $csv_starttime = reformat_date_time($fields[1], $fields[2]);
 		my $csv_endtime   = reformat_date_time($fields[3], $fields[4]);
 
