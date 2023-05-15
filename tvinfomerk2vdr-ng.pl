@@ -45,6 +45,7 @@
 # 20220719/bie: cosmetic fix of online help, remove hardwired "tvinfo" for service account help
 # 20220720/bie: hardcode "tvinfo" as default service, adjust username lookup for services
 # 20230206/bie: fix potential "Negative repeat count" on displaying title
+# 20230515/bie: incl support-service.pl module
 
 use strict; 
 use warnings; 
@@ -122,6 +123,7 @@ require ("inc/logging.pl");
 require ("inc/support-dvr.pl");
 require ("inc/support-channels.pl");
 require ("inc/support-channelmap.pl");
+require ("inc/support-service.pl");
 
 my $rc_exit = 0;
 my $rc;
