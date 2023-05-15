@@ -27,6 +27,7 @@
 # 20230422/bie: detect empty title and display a notice
 # 20230509/bie: add initial HTML login support
 # 20230511/bie: add Merkzettel HTML parser
+# 20230515/bie: add Sender HTML parser
 
 use strict;
 use warnings;
@@ -79,7 +80,7 @@ if (defined $config{'proxy'}) {
 
 my $tvinfo_url_base      = "https://www.tvinfo.de";
 my $tvinfo_url_login     = $tvinfo_url_base . "/";
-my $tvinfo_channels      = $tvinfo_url_base . "/sender/meine-sender";
+my $tvinfo_channels      = $tvinfo_url_base . "/sender";
 my $tvinfo_timers        = $tvinfo_url_base . "/merkzettel";
 
 my $tvinfo_login_cookie;
@@ -447,7 +448,7 @@ sub service_tvinfo_login() {
 # XML structure:
 #    TODO
 ################################################################################
-sub service_tvinfo_get_channels($$;$) {
+sub service_tvinfo_get_channels_xml($) {
 	my $channels_ap = $_[0];
 
 	my @xml_list;
@@ -670,6 +671,162 @@ sub service_tvinfo_get_channels($$;$) {
 		};
 		logging("DEBUG", "TVINFO: selected station: " . sprintf("%4d: %4d %s", $c, $id, $name));
 	};
+
+	return(0);
+};
+
+
+################################################################################
+################################################################################
+# get channels (aka stations/Sender) from TVinfo via HTML
+# arg1: pointer to channel array
+#
+# $traceclass{'TVINFO'}:
+#   0x101: HTML dump channels raw
+#   0x102: HTML dump channels
+#
+# return values
+# 0: ok
+# 1: error
+# 2: list empty
+#
+# HTML structure:
+# <div class="w100"><a href="/tv-programm/ard" title="TV Sender: ARD - Das Erste">ARD - Das Erste</a></div>
+# <div id="aBut37" class="but37 adbt"><a href="javascript:_addDelSID(37,0);" class="but_s_dBlue" title="Sender ARD - Das Erste aus Meine Sender entfernen">&ndash;</a></div>
+################################################################################
+sub service_tvinfo_get_channels_html($) {
+	my $channels_ap = $_[0];
+
+	logging ("DEBUG", "TVINFO: fetch channels");
+
+	my $html_raw;
+
+	my $ReadStationHTML = undef;
+	my $WriteStationHTML = undef;
+
+	if ($config{'service.source.type'} eq "file") {
+		$ReadStationHTML = $config{'service.source.file.prefix'} . "-sender.html";
+	} elsif ($config{'service.source.type'} eq "network+store") {
+		$WriteStationHTML = $config{'service.source.file.prefix'} . "-sender.html";
+	} elsif ($config{'service.source.type'} eq "network") {
+	} else {
+		die "service.source.type is not supported: " . $config{'service.source.type'} . " - FIX CODE";
+	};
+
+	if (defined $ReadStationHTML) {
+		if (! -e $ReadStationHTML) {
+			logging("ERROR", "TVINFO: given raw file for channels is missing (forget -W before?): " . $ReadStationHTML);
+			return(1);
+		};
+		# load 'SENDER' from file
+		logging("INFO", "TVINFO: read SENDER/HTML contents of channels from file: " . $ReadStationHTML);
+		if(!open(FILE, "<$ReadStationHTML")) {
+			logging("ERROR", "TVINFO: can't read SENDER/HTML contents of channels from file: " . $ReadStationHTML);
+			return(1);
+		};
+		binmode(FILE);
+		while(<FILE>) {
+			$html_raw .= $_;
+		};
+		close(FILE);
+		logging("INFO", "TVINFO: SENDER/HTML contents of channels read from file: " . $ReadStationHTML);
+	} else {
+		# Fetch 'SENDER'
+		logging ("INFO", "TVINFO: fetch channels via SENDER/HTML interface");
+
+		my $rc = service_tvinfo_login();
+		return (1) if ($rc != 0);
+
+		my $request = $tvinfo_channels;
+		logging("TRACE", "TVINFO: execute: curl -b '$tvinfo_auth_cookie' -b '$tvinfo_user_cookie' -A '$user_agent' -k '$request'");
+		$html_raw = `curl -b '$tvinfo_auth_cookie' -b '$tvinfo_user_cookie' -A '$user_agent' -k '$request' 2>/dev/null`;
+
+		if (defined $WriteStationHTML) {
+			logging("NOTICE", "TVINFO: write SENDER/HTML contents of channels to file: " . $WriteStationHTML);
+			if (! open(FILE, ">$WriteStationHTML")) {
+				logging("ERROR", "TVINFO: can't write SENDER/HTML contents of channels to file: " . $WriteStationHTML . " (" . $! . ")");
+				return(1);
+			};
+			print FILE $html_raw;
+			close(FILE);
+			logging("NOTICE", "TVINFO: SENDER/HTML contents of channels written to file: " . $WriteStationHTML);
+		};
+	};
+
+	if (defined $traceclass{'TVINFO'} && ($traceclass{'TVINFO'} & 0x110)) {
+		print "#### TVINFO/channels SENDER/HTML NATIVE RESPONSE BEGIN ####\n";
+		print $html_raw;
+		print "#### TVINFO/channels SENDER/HTML NATIVE RESPONSE END   ####\n";
+	};
+
+	if ($html_raw !~ /Meine Sender/o) {
+		logging ("ALERT", "TVINFO: SENDER/HTML of channel has not supported content, please check for latest version and contact asap script development");
+		return(1);
+	};
+
+
+	####################################
+	## SENDER/HTML channel analysis
+	####################################
+
+	logging("DEBUG", "TVINFO: start SENDER/HTML channel analysis");
+
+	$html_raw = decode("utf-8", $html_raw);
+
+	# Run through entries of SENDER/HTML
+	my $parser= HTML::TokeParser::Simple->new(\$html_raw);
+
+	my $name = undef;
+	my $id;
+	my $flag;
+	while (my $anchor = $parser->get_token) {
+		next unless ($anchor->is_start_tag('a'));
+
+		my $href = $anchor->get_attr('href');
+		next unless defined($href);
+
+		unless (defined($name)) {
+			my $class = $anchor->get_attr('class');
+			next if defined($class);
+
+			my $title = $anchor->get_attr('title');
+			next unless defined($title);
+			next unless ($title =~ /^TV Sender: (.*)$/o);
+			$name = $1;
+		} else {
+			next unless ($href =~ /^javascript:_addDelSID\((\d+),(\d+)\);$/o);
+			$id = $1;
+			$flag = $2;
+
+			my $selected = 0;
+			$selected = 1 if ($flag == 0);
+
+			$tvinfo_channel_name_by_id{$id} = $name;
+			$tvinfo_channel_id_by_name{$name} = $id;
+
+			push @$channels_ap, {
+				'cid'      => $id,
+				'name'     => $name,
+				'enabled'  => $selected,
+			};
+
+			logging ("DEBUG", "TVINFO: SENDER/HTML found: >" . $name . "< id=" . $id . " selected=" . $selected);
+
+			undef $name;
+		};
+	};
+
+	if (scalar(keys %tvinfo_channel_id_by_name) == 0) {
+		logging("ALERT", "No entry found for 'Alle Sender' - please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	if (scalar(keys %tvinfo_MeineSender_id_list) == 0) {
+		logging("ALERT", "TVINFO: no entry found for 'Meine Sender' - please check for latest version and contact asap script development");
+		return(1);
+	};
+
+	logging("DEBUG", "TVINFO: SENDER/HTML finish channel analysis");
 
 	return(0);
 };
@@ -1255,8 +1412,28 @@ sub service_tvinfo_get_timers($) {
 	# via legacy XML
 	$rc = service_tvinfo_get_timers_xml($_[0]);
 
-#	# via HTML
-#	$rc = service_tvinfo_get_timers_html($_[0]);
+	# via HTML
+	#$rc = service_tvinfo_get_timers_html($_[0]);
+
+	return($rc);
+};
+
+
+################################################################################
+################################################################################
+# get channels (aka stations/Sender) from TVinfo
+# arg1: pointer to channel array
+# arg2: pointer to config
+# debug
+################################################################################
+sub service_tvinfo_get_channels($) {
+	my $rc;
+
+	# via legacy XML
+	$rc = service_tvinfo_get_channels_xml($_[0]);
+
+	# via HTML
+	#$rc = service_tvinfo_get_channels_html($_[0]);
 
 	return($rc);
 };
