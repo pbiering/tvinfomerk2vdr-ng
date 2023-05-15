@@ -437,10 +437,8 @@ sub service_tvinfo_login() {
 
 ################################################################################
 ################################################################################
-# get channels (aka stations/Sender) from TVinfo
+# get channels (aka stations/Sender) from TVinfo via legacy XML
 # arg1: pointer to channel array
-# arg2: pointer to config
-# debug
 #
 # $traceclass{'TVINFO'}:
 #   0x01: XML dump stations raw
@@ -960,10 +958,8 @@ sub service_tvinfo_get_timers_xml($) {
 
 ################################################################################
 ################################################################################
-# get timers (aka schedules/Merkzettel) from TVinfo via legacy XML interface
+# get timers (aka schedules/Merkzettel) from TVinfo via HTML interface
 # arg1: pointer to timers array
-#
-# debug
 #
 # $traceclass{'TVINFO'}:
 #   0x110: HTML dump schedules raw
@@ -1018,7 +1014,7 @@ sub service_tvinfo_get_timers_html($) {
 			logging("ERROR", "TVINFO: given raw file for timers is missing (forget -W before?): " . $ReadScheduleHTML);
 			return(1);
 		};
-		# load 'TV-Planer/RSS' from file
+		# load 'MERKZETTEL' from file
 		logging("INFO", "TVINFO: read MERKZETTEL/HTML contents of timers from file: " . $ReadScheduleHTML);
 		if(!open(FILE, "<$ReadScheduleHTML")) {
 			logging("ERROR", "TVINFO: can't read MERKZETTEL/HTML contents of timers from file: " . $ReadScheduleHTML);
@@ -1031,7 +1027,7 @@ sub service_tvinfo_get_timers_html($) {
 		close(FILE);
 		logging("INFO", "TVINFO: MERKZETTEL/HTML contents of timers read from file: " . $ReadScheduleHTML);
 	} else {
-		# Fetch 'TV-Planer/RSS'
+		# Fetch 'MERKZETTEL'
 		logging ("INFO", "TVINFO: fetch timers via MERKZETTEL/HTML interface");
 
 		my $rc = service_tvinfo_login();
@@ -1112,19 +1108,6 @@ sub service_tvinfo_get_timers_html($) {
 	};
 
 	logging("DEBUG", "TVINFO: found MERKZETTEL/HTML timer header");
-
-	sub reformat_date_time($$) {
-		# %d.%d.%d -> %Y-%m-%d
-		$_[0] =~ /^(\d+)\.(\d+)\.(\d+)$/o;
-		my $date = sprintf("%04d-%02d-%02d", $3, $2, $1);
-
-		# %d:%d:%d -> %H:%M:%S
-		$_[1] =~ /^(\d+):(\d+):(\d+)$/o;
-		my $time = sprintf("%02d:%02d:%02d", $1, $2, $3);
-
-		return $date . " " . $time;
-	};
-
 
 	## run through rows
 	my %timer_columns;
