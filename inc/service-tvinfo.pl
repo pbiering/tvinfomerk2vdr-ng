@@ -28,6 +28,11 @@
 # 20230509/bie: add initial HTML login support
 # 20230511/bie: add Merkzettel HTML parser
 # 20230515/bie: add Sender HTML parser
+# 20230516/bie: add support for service options
+
+# supported:
+#  --so use:xml
+#  --so use:html
 
 use strict;
 use warnings;
@@ -65,6 +70,7 @@ our $service_login_state;
 ## activate module
 our  @service_list_supported;
 push @service_list_supported, "tvinfo";
+
 our %module_functions;
 $module_functions{'service'}->{'tvinfo'}->{'get_channels'} = \&service_tvinfo_get_channels;
 $module_functions{'service'}->{'tvinfo'}->{'get_timers'} = \&service_tvinfo_get_timers;
@@ -660,18 +666,6 @@ sub service_tvinfo_get_channels_xml($) {
 		return(1);
 	};
 
-	# print 'Meine Sender'
-	my $c = -1;
-	foreach my $id (keys %tvinfo_MeineSender_id_list) {
-		$c++;
-
-		my $name = "MISSING";
-		if (defined $tvinfo_channel_name_by_id{$id}) {
-			$name = $tvinfo_channel_name_by_id{$id};
-		};
-		logging("DEBUG", "TVINFO: selected station: " . sprintf("%4d: %4d %s", $c, $id, $name));
-	};
-
 	return(0);
 };
 
@@ -799,7 +793,11 @@ sub service_tvinfo_get_channels_html($) {
 			$flag = $2;
 
 			my $selected = 0;
-			$selected = 1 if ($flag == 0);
+
+			if ($flag == 0) {
+				$selected = 1;
+				$tvinfo_MeineSender_id_list{$id}->{'name'} = $name;
+			};
 
 			$tvinfo_channel_name_by_id{$id} = $name;
 			$tvinfo_channel_id_by_name{$name} = $id;
@@ -1277,6 +1275,7 @@ sub service_tvinfo_get_timers_html($) {
 		if ($anchor->is_start_tag('tr')) {
 			# look for attr 'id'
 			$id = $anchor->get_attr('id');
+			next unless (defined $id);
 			# strip leading chars
 			$id = $1 if ($id =~ /^[A-Za-z]+([0-9]+)/);
 			next;
@@ -1409,11 +1408,13 @@ sub service_tvinfo_get_timers_html($) {
 sub service_tvinfo_get_timers($) {
 	my $rc;
 
-	# via legacy XML
-	$rc = service_tvinfo_get_timers_xml($_[0]);
-
-	# via HTML
-	#$rc = service_tvinfo_get_timers_html($_[0]);
+	if (defined ($config{'service.options'}) && (grep /use:html/, $config{'service.options'})) {
+		# via HTML
+		$rc = service_tvinfo_get_timers_html($_[0]);
+	} else {
+		# via legacy XML
+		$rc = service_tvinfo_get_timers_xml($_[0]);
+	};
 
 	return($rc);
 };
@@ -1429,11 +1430,31 @@ sub service_tvinfo_get_timers($) {
 sub service_tvinfo_get_channels($) {
 	my $rc;
 
-	# via legacy XML
-	$rc = service_tvinfo_get_channels_xml($_[0]);
+	if (defined ($config{'service.options'}) && (grep /use:html/, $config{'service.options'})) {
+		# via HTML
+		$rc = service_tvinfo_get_channels_html($_[0]);
+	} else {
+		# via legacy XML
+		$rc = service_tvinfo_get_channels_xml($_[0]);
+	};
 
-	# via HTML
-	#$rc = service_tvinfo_get_channels_html($_[0]);
+	if ($rc == 0)  {
+		# print 'Meine Sender'
+		my $c = -1;
+		foreach my $id (keys %tvinfo_MeineSender_id_list) {
+			$c++;
+
+			my $name = "MISSING";
+			my $altnames = "";
+			if (defined $tvinfo_channel_name_by_id{$id}) {
+				$name = $tvinfo_channel_name_by_id{$id};
+			};
+			if (defined $tvinfo_AlleSender_id_list{$id}->{'altnames'}) {
+				$altnames = " (" . $tvinfo_AlleSender_id_list{$id}->{'altnames'} .  ")";
+			};
+			logging("DEBUG", "TVINFO: selected station: " . sprintf("%4d: %4d %s%s", $c, $id, $name, $altnames));
+		};
+	};
 
 	return($rc);
 };
