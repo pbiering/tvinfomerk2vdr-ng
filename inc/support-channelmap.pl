@@ -28,6 +28,8 @@
 # 20220629/bie: remove " Television" ("RTL" issue)
 # 20221121/bie: remove region "Bayern" from "SAT.1"
 # 20221208/bie: remove city "Muenchen" from "RTL"
+# 20230604/bie: remove "RTL" from "Nitro"
+# 20230604/bie: map "Eurosport" into "Eurosport 1 Deutschland"
 
 use strict;
 use warnings;
@@ -65,6 +67,7 @@ my %channel_translations = (
 	'TV5'		       =>       'TV5MONDE EUROPE', 
 	'BR-alpha'	       =>	'ARD-alpha',
 	'EinsFestival'	       =>	'ONE',
+	'Eurosport'	       =>	'Eurosport 1 Deutschland',
 );
 
 ## match method number -> text
@@ -130,6 +133,8 @@ sub normalize($) {
 	$input =~ s/(SAT\.1) (Bayern)$/$1/g; # SAT.1
 
 	$input =~ s/(RTL) (Muenchen)$/$1/g; # RTL
+
+	$input =~ s/RTL (Nitro)/$1/g; # RTL Nitro -> Nitro
 
 	# shift 'HD'
 	$input =~ s/^(.*) HD (.*)$/$1 $2 HD/ig; # WDR HD Köln
