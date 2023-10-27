@@ -3,7 +3,7 @@ tvinfomerk2vdr-ng
 
 SERVICE to DVR timer importer Next Generation
 
-supported SERVICEs so far: TVinfo (Merkzettel), TVdirekt (TV-Planer)
+supported SERVICEs so far: TVinfo (Merkzettel: XML/HTML), TVdirekt (TV-Planer: HTML)
 
 supported DVRs: vdr, tvheadend
 

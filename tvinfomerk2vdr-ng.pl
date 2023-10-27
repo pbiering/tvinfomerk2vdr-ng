@@ -45,6 +45,8 @@
 # 20220719/bie: cosmetic fix of online help, remove hardwired "tvinfo" for service account help
 # 20220720/bie: hardcode "tvinfo" as default service, adjust username lookup for services
 # 20230206/bie: fix potential "Negative repeat count" on displaying title
+# 20230515/bie: incl support-service.pl module
+# 20230516/bie: add support for service options
 
 use strict; 
 use warnings; 
@@ -57,7 +59,7 @@ binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
 
 our $progname = "tvinfomerk2vdr-ng.pl";
-our $progversion = "1.1.0";
+our $progversion = "2.0.0";
 
 ## Requirements:
 # Ubuntu: libxml-simple-perl libdate-calc-perl
@@ -122,6 +124,7 @@ require ("inc/logging.pl");
 require ("inc/support-dvr.pl");
 require ("inc/support-channels.pl");
 require ("inc/support-channelmap.pl");
+require ("inc/support-service.pl");
 
 my $rc_exit = 0;
 my $rc;
@@ -303,6 +306,7 @@ Service related
                                      supported         : $service_list_supported_string
          -U <username>             SERVICE username (default: $username [config-ng.pl])
          -P <password>             SERVICE password (default: $password [config-ng.pl])
+         --so <opt>                SERVICE options (see related include file)
 
 DVR related
          --dvr <type>              define DVR type
@@ -408,6 +412,7 @@ my ($opt_print_properties, $opt_read_properties, $opt_skip_read_properties, $opt
 my ($opt_print_internal_config);
 my ($opt_include_ca_channels, @opt_whitelist_ca_group);
 my ($opt_dvr_credentials);
+my (@opt_service_options);
 
 
 Getopt::Long::config('bundling');
@@ -436,6 +441,7 @@ my $options_result = GetOptions (
 	"U=s"		=> \$opt_U,
 	"P=s"		=> \$opt_P,
 	"E|sst:s"	=> \$opt_E,
+	"so=s"		=> \@opt_service_options,
 
 	#"system=s"	=> \$opt_system,
 
@@ -799,14 +805,6 @@ if (defined $config{'service.user'}) {
 			logging("ERROR", "SERVICE password not explicitly given, still default: " . $config{'service.password'});
 			exit 1;
 		};
-
-		if ($setup{'service'} eq "tvinfo") {
-			# TODO: move such option checks in service module
-			if ($config{'service.password'} !~ /^{MD5}/) {
-				$config{'service.password'} = service_tvinfo_convert_password($config{'service.password'});
-				logging("WARN", "TVinfo password is not given as hash (conversion recommended for security reasons): $config{'service.password'}");
-			};
-		};
 	};
 };
 
@@ -816,6 +814,10 @@ if ((defined $opt_U) && (defined $opt_P) &&
 	$properties{'service.' . $setup{'service'} . ".user." . $opt_U . ".password"} = $config{'service.password'};
 };
 
+## SERVICE option handling
+if (scalar(@opt_service_options) > 0) {
+	$config{'service.options'} = join(" "," ",  @opt_service_options);
+};
 
 ## -F/--folder
 if (defined $opt_F) {

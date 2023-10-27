@@ -2,7 +2,7 @@
 #
 # Support functions for channels
 #
-# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014 - 2023 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -12,6 +12,7 @@
 # Changelog:
 # 20141107/bie: new
 # 20190713/bie: fix UTF-8 conversion
+# 20230515/bie: only print defined altnames
 
 use strict;
 use warnings;
@@ -202,7 +203,7 @@ sub print_service_channels($) {
 			$$channel_hp{'cid'},
 			$$channel_hp{'enabled'},
 			$$channel_hp{'name'},
-			$$channel_hp{'altnames'},
+			defined ($$channel_hp{'altnames'}) ? $$channel_hp{'altnames'} : "",
 		));
 	};
 };

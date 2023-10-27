@@ -25,7 +25,6 @@ use HTML::StripScripts::Parser;
 use HTML::TokeParser::Simple;
 use Encode;
 use Text::CSV;
-use Digest::MD5 qw(md5_hex);
 
 ## debug/trace information
 our %traceclass;
@@ -467,7 +466,7 @@ sub service_tvdirekt_get_timers($) {
 	};
 
 	if ($csv_raw !~ /"Betreff","Beginnt am","Beginnt um","Endet am","Endet um","Beschreibung","Kategorien"/o) {
-		logging ("ALERT", "TVDIREKT: CALENDAR/CVS of timer has not supported header please check for latest version and contact asap script development");
+		logging ("ALERT", "TVDIREKT: CALENDAR/CSV of timer has not supported header please check for latest version and contact asap script development");
 		return(1);
 	};
 
@@ -509,18 +508,6 @@ sub service_tvdirekt_get_timers($) {
 		if ($fields[0] eq "Betreff") {
 			logging("DEBUG", "TVDIREKT: SKIP CSV header: $line");
 			next;
-		};
-
-		sub reformat_date_time($$) {
-			# %d.%d.%d -> %Y-%m-%d
-			$_[0] =~ /^(\d+)\.(\d+)\.(\d+)$/o;
-			my $date = sprintf("%04d-%02d-%02d", $3, $2, $1);
-
-			# %d:%d:%d -> %H:%M:%S
-			$_[1] =~ /^(\d+):(\d+):(\d+)$/o;
-			my $time = sprintf("%02d:%02d:%02d", $1, $2, $3);
-
-			return $date . " " . $time;
 		};
 
 		my $csv_starttime = reformat_date_time($fields[1], $fields[2]);

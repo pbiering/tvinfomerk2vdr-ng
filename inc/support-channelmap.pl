@@ -2,7 +2,7 @@
 #
 # Sophisticated SERVICE to DVR channel name mapper
 #
-# (P) & (C) 2013-2022 by Peter Bieringer <pb@bieringer.de>
+# (P) & (C) 2013-2023 by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -28,8 +28,10 @@
 # 20220629/bie: remove " Television" ("RTL" issue)
 # 20221121/bie: remove region "Bayern" from "SAT.1"
 # 20221208/bie: remove city "Muenchen" from "RTL"
+# 20230516/bie: generate altnames for specific channels retrieved by service
 # 20230604/bie: remove "RTL" from "Nitro"
 # 20230604/bie: map "Eurosport" into "Eurosport 1 Deutschland"
+# 20231026/bie: add support for "Pro7 MAXX" (2x X) mapping
 
 use strict;
 use warnings;
@@ -68,6 +70,7 @@ my %channel_translations = (
 	'BR-alpha'	       =>	'ARD-alpha',
 	'EinsFestival'	       =>	'ONE',
 	'Eurosport'	       =>	'Eurosport 1 Deutschland',
+	'ProSieben MAXX'       =>	'ProSieben MAX', # 20231016
 );
 
 ## match method number -> text
@@ -93,6 +96,24 @@ my %hd_info = (
 );
 
 my $name_vdr;
+
+## create altnames only for services
+sub altnames_service($) {
+	my $input = $_[0];
+	my @result;
+
+	if ($input =~ /^(.*) HD$/o) {
+		# e.g. "Anixe HD"
+		push @result, $1;
+	};
+
+	if ($input =~ /^(.*) CH$/o) {
+		# e.g. "Super RTL CH"
+		push @result, $1;
+	};
+
+	return(join("|", @result));
+};
 
 ## normalize channel names
 sub normalize($) {
@@ -263,7 +284,6 @@ sub channelmap($$$$) {
 			};
 		};
 
-		# add altnames
 		if (defined $$channel_hp{'altnames'} && length($$channel_hp{'altnames'}) > 0) {
 			foreach my $altname (split '\|', $$channel_hp{'altnames'}) {
 				if ($altname eq $name) {
@@ -316,6 +336,14 @@ sub channelmap($$$$) {
         foreach my $id (sort { $$service_id_list_hp{$a}->{'name'} cmp $$service_id_list_hp{$b}->{'name'} } keys %$service_id_list_hp) {
 		my $name = $$service_id_list_hp{$id}->{'name'};
 		my $altnames = $$service_id_list_hp{$id}->{'altnames'};
+
+		if ((defined $altnames) && length($altnames) > 0) {
+			# nothing to do
+		} else {
+			# try special generated altnames
+			$altnames = altnames_service($name);
+		};
+
 		my $name_normalized = normalize($name);
 		my $name_translated = $channel_translations{$name};
 		my $match_method = undef;
