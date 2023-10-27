@@ -29,6 +29,7 @@
 # 20230511/bie: add Merkzettel HTML parser
 # 20230515/bie: add Sender HTML parser
 # 20230516/bie: add support for service options
+# 20231027/bie: remove MD5 password prefix on authentication
 
 # supported:
 #  --so use:xml
@@ -110,7 +111,7 @@ my $use_curl = 0;
 ## convert password
 # $1: password $2: flag (if defined, do not add prefix)
 sub service_tvinfo_convert_password($;$) {
-	if ($_[0] !~ /^{MD5}/) {
+	if ($_[0] !~ /^{MD5}(.*)/) {
 		logging("NOTICE", "TVinfo password is not given as hash (conversion used for security reasons)");
 		if (defined $_[1]) {
 			return(md5_hex($_[0]));
@@ -118,7 +119,11 @@ sub service_tvinfo_convert_password($;$) {
 			return("{MD5}" . md5_hex($_[0]));
 		};
 	} else {
-		return($_[0]);
+		if (defined $_[1]) {
+			return($1);
+		} else {
+			return($_[0]);
+		};
 	};
 };
 
