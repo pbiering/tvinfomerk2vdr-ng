@@ -3,7 +3,7 @@
 #
 # Support functions for DVR
 #
-# (C) & (P) 2014 - 2014 by by Peter Bieringer <pb@bieringer.de>
+# (C) & (P) 2014-2023 by by Peter Bieringer <pb@bieringer.de>
 #
 # License: GPLv2
 #
@@ -12,6 +12,7 @@
 #
 # Changelog:
 # 20141115/bie: new
+# 20231220/bie: skip timer which has no expanded attribute
 
 use strict;
 use warnings;
@@ -139,6 +140,7 @@ sub dvr_convert_timers_channels($$) {
 
 	## check for channels which needs to be expanded
 	foreach my $timer_hp (@$timers_ap) {
+		next if (! $channels_lookup_by_cid{$$timer_hp{'cid'}}->{'expanded'});
 		if ($channels_lookup_by_cid{$$timer_hp{'cid'}}->{'expanded'} == 1) {
 			my $timer_start = strftime("%H%M", localtime($$timer_hp{'start_ut'}));
 			my $timer_stop  = strftime("%H%M", localtime($$timer_hp{'stop_ut'}));
